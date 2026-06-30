@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Trending Daily · 归档索引</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
+                         'Helvetica Neue', Arial, sans-serif;
+            background-color: #0d1117; color: #c9d1d9;
+            line-height: 1.6; min-height: 100vh;
+        }
+        a { color: #58a6ff; text-decoration: none; transition: color 0.2s ease; }
+        a:hover { color: #79c0ff; }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%; left: -50%;
+            width: 200%; height: 200%;
+            background:
+                radial-gradient(ellipse at 30% 40%, rgba(56,139,253,0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 70%, rgba(139,148,158,0.02) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* 布局 */
+        .layout { display: flex; min-height: 100vh; }
+
+        /* 侧边栏 */
+        .sidebar {
+            width: 300px; flex-shrink: 0;
+            background: #161b22;
+            border-right: 1px solid rgba(48,54,61,0.6);
+            padding: 24px 0;
+            overflow-y: auto;
+            position: sticky; top: 0; height: 100vh;
+        }
+        .sidebar-header {
+            padding: 0 20px 20px;
+            border-bottom: 1px solid rgba(48,54,61,0.4);
+            margin-bottom: 16px;
+        }
+        .sidebar-header h1 {
+            font-size: 18px; font-weight: 700; color: #f0f6fc;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .fire-icon { font-size: 24px; }
+        .sidebar-header .stats {
+            margin-top: 10px; font-size: 13px; color: #8b949e;
+        }
+        .sidebar-header .stats strong { color: #58a6ff; font-weight: 600; }
+
+        /* 树 */
+        .tree-year { margin-bottom: 4px; }
+        .tree-toggle {
+            display: flex; align-items: center;
+            width: 100%; padding: 10px 20px;
+            background: none; border: none; cursor: pointer;
+            color: #c9d1d9; font-size: 15px; font-weight: 600;
+            font-family: inherit; text-align: left;
+            transition: background 0.15s ease; gap: 10px;
+        }
+        .tree-toggle:hover { background: rgba(110,118,129,0.1); }
+        .tree-toggle .arrow {
+            font-size: 10px; transition: transform 0.25s ease;
+            color: #484f58; flex-shrink: 0;
+            width: 16px; text-align: center;
+        }
+        .tree-toggle.open .arrow { transform: rotate(90deg); }
+        .tree-toggle .count-badge {
+            margin-left: auto;
+            background: rgba(110,118,129,0.15); color: #8b949e;
+            padding: 1px 8px; border-radius: 10px;
+            font-size: 11px; font-weight: 500;
+        }
+        .tree-children { display: none; padding-left: 16px; }
+        .tree-children.open { display: block; }
+
+        .tree-month .tree-toggle {
+            padding: 7px 20px 7px 28px;
+            font-size: 14px; font-weight: 500; color: #8b949e;
+        }
+        .tree-month .tree-toggle:hover { color: #c9d1d9; }
+
+        .date-list { padding-left: 16px; }
+        .date-link {
+            display: block;
+            padding: 5px 20px 5px 44px;
+            font-size: 13px; color: #6e7681;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+        }
+        .date-link:hover {
+            background: rgba(88,166,255,0.08);
+            color: #58a6ff; text-decoration: none;
+        }
+
+        /* 主内容 */
+        .main-content {
+            flex: 1; padding: 48px 40px;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+        }
+        .welcome-card { text-align: center; max-width: 560px; }
+        .big-icon {
+            font-size: 72px; margin-bottom: 24px;
+            animation: float 4s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50%      { transform: translateY(-12px); }
+        }
+        .welcome-card h2 {
+            font-size: 28px; font-weight: 700; color: #f0f6fc;
+            margin-bottom: 12px;
+        }
+        .welcome-card p {
+            color: #8b949e; font-size: 16px;
+            margin-bottom: 32px; line-height: 1.8;
+        }
+        .stat-boxes {
+            display: flex; gap: 16px;
+            justify-content: center; flex-wrap: wrap;
+            margin-bottom: 36px;
+        }
+        .stat-box {
+            background: rgba(22,27,34,0.8);
+            border: 1px solid rgba(48,54,61,0.5);
+            border-radius: 12px;
+            padding: 20px 28px; text-align: center; min-width: 140px;
+        }
+        .stat-box .num {
+            font-size: 32px; font-weight: 800; color: #58a6ff; line-height: 1.2;
+        }
+        .stat-box .desc {
+            font-size: 13px; color: #8b949e; margin-top: 6px;
+        }
+        .welcome-hint { color: #484f58; font-size: 13px; }
+        .welcome-hint span { color: #6e7681; }
+
+        @media (max-width: 768px) {
+            .layout { flex-direction: column; }
+            .sidebar {
+                width: 100%; height: auto; position: static;
+                max-height: 50vh;
+                border-right: none;
+                border-bottom: 1px solid rgba(48,54,61,0.6);
+            }
+            .main-content { padding: 32px 20px; }
+            .welcome-card h2 { font-size: 22px; }
+            .stat-boxes { gap: 10px; }
+            .stat-box { padding: 14px 18px; min-width: 100px; }
+            .stat-box .num { font-size: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>
+                    <span class="fire-icon">🔥</span>
+                    Trending 归档
+                </h1>
+                <div class="stats">
+                    共收录 <strong>{{ total_days }}</strong> 天数据 · 生成于 {{ generated_time }}
+                </div>
+            </div>
+            <nav class="tree-root">
+                {% for year_item in tree %}
+                <div class="tree-year">
+                    <button class="tree-toggle{% if year_item.open %} open{% endif %}" onclick="toggleTree(this)">
+                        <span class="arrow">▶</span>
+                        📅 {{ year_item.year }}年
+                        <span class="count-badge">{{ year_item.total }}天</span>
+                    </button>
+                    <div class="tree-children{% if year_item.open %} open{% endif %}">
+                        {% for month_item in year_item.months %}
+                        <div class="tree-month">
+                            <button class="tree-toggle{% if month_item.open %} open{% endif %}" onclick="toggleTree(this)">
+                                <span class="arrow">▶</span>
+                                {{ month_item.month }}月
+                                <span class="count-badge">{{ month_item.count }}天</span>
+                            </button>
+                            <div class="tree-children date-list{% if month_item.open %} open{% endif %}">
+                                {% for date_str in month_item.dates %}
+                                <a class="date-link" href="pages/{{ year_item.year }}/{{ month_item.month_str }}/{{ date_str }}.html">
+                                    {{ date_str }}
+                                </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="welcome-card">
+                <div class="big-icon">🚀</div>
+                <h2>GitHub Trending Daily</h2>
+                <p>
+                    每天自动抓取 GitHub 全球热门仓库 Top 10，<br>
+                    以精美的可视化页面归档保存。<br>
+                    从左侧导航栏选择一天，开始浏览。
+                </p>
+                <div class="stat-boxes">
+                    <div class="stat-box">
+                        <div class="num">{{ total_days }}</div>
+                        <div class="desc">已收录天数</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="num">{{ tree | length }}</div>
+                        <div class="desc">跨越年份</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="num">10</div>
+                        <div class="desc">每日收录</div>
+                    </div>
+                </div>
+                <p class="welcome-hint">
+                    运行 <span>python run.py</span> 即可抓取今日最新数据
+                </p>
+            </div>
+        </main>
+    </div>
+    <script>
+        function toggleTree(btn) {
+            btn.classList.toggle('open');
+            const children = btn.nextElementSibling;
+            if (children) { children.classList.toggle('open'); }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+# secrets - never commit
+.env
+.env.local
+.env.*.local
+
+# user persona (contains personal info)
+user_profile.md
+
+# wrapper scripts that get secrets from .env at install time
+run.bat
+check.bat
+start_server.bat
+start_server_ondemand.bat
+run_via_schtasks.bat
+
+# runtime state - auto-generated, never commit
+log/
+cache/
+data/chats/
+data/chats/**
+data/202*/
+data/202*/**/*
+pages/202*/
+pages/202*/**/*
+index.html
+__pycache__/
+__pycache__/**/*
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# dev / debug artifacts
+node_modules/
+_node_old/
+screenshot-*.png
+*.log
+!docs/.gitkeep
+.cache/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# editor backup files
+*~
+*.bak
+*.tmp
+*.orig

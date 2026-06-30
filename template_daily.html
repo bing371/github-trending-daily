@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Trending Top 10 · {{ date_str }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
+                         'Helvetica Neue', Arial, sans-serif;
+            background-color: #0d1117;
+            color: #c9d1d9;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        a { color: #58a6ff; text-decoration: none; transition: color 0.2s ease; }
+        a:hover { color: #79c0ff; text-decoration: underline; }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%; left: -50%;
+            width: 200%; height: 200%;
+            background:
+                radial-gradient(ellipse at 20% 50%, rgba(88,166,255,0.03) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 20%, rgba(240,136,62,0.02) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* 顶部导航 */
+        .top-bar {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(13,17,23,0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(48,54,61,0.6);
+            padding: 16px 0;
+        }
+        .top-bar-inner {
+            max-width: 960px; margin: 0 auto; padding: 0 24px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .top-bar-title { display: flex; align-items: center; gap: 12px; }
+        .fire-icon {
+            font-size: 28px;
+            animation: fireGlow 2s ease-in-out infinite;
+        }
+        @keyframes fireGlow {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.4); }
+        }
+        .top-bar-title h1 {
+            font-size: 20px; font-weight: 700;
+            color: #f0f6fc; letter-spacing: -0.5px;
+        }
+        .date-badge {
+            background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%);
+            color: #fff; padding: 4px 14px; border-radius: 20px;
+            font-size: 13px; font-weight: 600; letter-spacing: 0.3px;
+        }
+        .top-bar-nav { display: flex; align-items: center; gap: 8px; }
+        .nav-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 16px; border-radius: 8px;
+            font-size: 13px; color: #c9d1d9;
+            background: rgba(110,118,129,0.1);
+            border: 1px solid rgba(110,118,129,0.2);
+            transition: all 0.2s ease; cursor: pointer;
+        }
+        .nav-btn:hover {
+            background: rgba(110,118,129,0.2);
+            color: #f0f6fc; text-decoration: none;
+            border-color: rgba(110,118,129,0.4);
+        }
+        .nav-btn.disabled { opacity: 0.3; pointer-events: none; }
+
+        /* 设置按钮（右上角齿轮） */
+        .settings-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 14px; border-radius: 8px;
+            font-size: 13px; color: #c9d1d9;
+            background: rgba(110,118,129,0.1);
+            border: 1px solid rgba(110,118,129,0.2);
+            cursor: pointer; transition: all 0.2s ease;
+        }
+        .settings-btn:hover {
+            background: rgba(110,118,129,0.2);
+            color: #f0f6fc; border-color: rgba(110,118,129,0.4);
+        }
+
+        /* 设置面板（标签页：用户职业 / 翻译API / agentAPI） */
+        .profile-modal-bg {
+            display: none; position: fixed; inset: 0; z-index: 200;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+            align-items: center; justify-content: center;
+            padding: 24px;
+        }
+        .profile-modal-bg.open { display: flex; }
+        .profile-modal {
+            width: 100%; max-width: 680px;
+            background: #161b22; border: 1px solid #30363d;
+            border-radius: 14px; padding: 0;
+            box-shadow: 0 12px 48px rgba(0,0,0,0.6);
+            display: flex; flex-direction: column;
+            max-height: 88vh; overflow: hidden;
+        }
+        .profile-modal-header {
+            padding: 20px 24px 0 24px;
+            display: flex; justify-content: space-between; align-items: flex-start;
+        }
+        .profile-modal-header h2 { font-size: 18px; color: #f0f6fc; margin: 0; }
+        .profile-modal-close {
+            background: none; border: none; cursor: pointer;
+            color: #8b949e; font-size: 22px; padding: 0; line-height: 1;
+        }
+        .profile-modal-close:hover { color: #f0f6fc; }
+
+        /* Tab bar */
+        .settings-tabs {
+            display: flex; gap: 4px;
+            padding: 16px 24px 0 24px;
+            border-bottom: 1px solid #30363d;
+        }
+        .settings-tab {
+            background: none; border: none; cursor: pointer;
+            padding: 10px 14px; font-size: 13px;
+            color: #8b949e; border-bottom: 2px solid transparent;
+            margin-bottom: -1px; transition: all 0.15s;
+        }
+        .settings-tab:hover { color: #c9d1d9; }
+        .settings-tab.active {
+            color: #f0f6fc; border-bottom-color: #58a6ff; font-weight: 500;
+        }
+
+        /* Tab panels */
+        .settings-tab-panel { display: none; padding: 20px 24px; overflow-y: auto; flex: 1; }
+        .settings-tab-panel.active { display: block; }
+        .settings-tab-panel p.hint {
+            font-size: 12.5px; color: #8b949e;
+            margin: 0 0 14px 0; line-height: 1.6;
+        }
+        .settings-tab-panel label.field-label {
+            display: block; font-size: 12px; color: #8b949e;
+            margin: 12px 0 6px 0; font-weight: 500;
+        }
+        .settings-tab-panel textarea {
+            width: 100%; min-height: 240px;
+            padding: 12px 14px; box-sizing: border-box;
+            background: #0d1117; color: #c9d1d9;
+            border: 1px solid #30363d; border-radius: 8px;
+            font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+            font-size: 13px; line-height: 1.6;
+            resize: vertical; outline: none;
+        }
+        .settings-tab-panel textarea:focus { border-color: #58a6ff; }
+        .settings-tab-panel input[type=text],
+        .settings-tab-panel input[type=password] {
+            width: 100%; padding: 10px 12px; box-sizing: border-box;
+            background: #0d1117; color: #c9d1d9;
+            border: 1px solid #30363d; border-radius: 8px;
+            font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+            font-size: 13px; outline: none;
+        }
+        .settings-tab-panel input:focus { border-color: #58a6ff; }
+        .settings-tab-panel select {
+            width: 100%; padding: 10px 12px; box-sizing: border-box;
+            background: #0d1117; color: #c9d1d9;
+            border: 1px solid #30363d; border-radius: 10px;
+            font-family: inherit; font-size: 13px; line-height: 1.5;
+            outline: none; cursor: pointer;
+            appearance: none; -webkit-appearance: none; -moz-appearance: none;
+            background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%238b949e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M3 4.5l3 3 3-3'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 36px;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .settings-tab-panel select:hover { border-color: #484f58; }
+        .settings-tab-panel select:focus {
+            border-color: #58a6ff;
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+        }
+        /* Dark dropdown options for browsers that respect it (Firefox / Chrome 118+) */
+        .settings-tab-panel select option {
+            background: #0d1117; color: #c9d1d9;
+            padding: 8px 12px;
+        }
+        .input-row {
+            display: flex; gap: 8px; align-items: center;
+        }
+        .input-row input { flex: 1; }
+        .toggle-vis {
+            padding: 8px 12px; border-radius: 8px;
+            background: #21262d; border: 1px solid #30363d;
+            color: #c9d1d9; font-size: 12px; cursor: pointer;
+        }
+        .toggle-vis:hover { background: #30363d; }
+
+        /* Footer with status + buttons */
+        .profile-modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid #30363d;
+            display: flex; gap: 10px; align-items: center;
+            background: #0d1117;
+        }
+        .profile-modal-footer .status {
+            flex: 1; font-size: 12.5px; color: #8b949e;
+        }
+        .profile-modal-footer .status.success { color: #3fb950; }
+        .profile-modal-footer .status.error { color: #f85149; }
+        .profile-modal-footer button {
+            padding: 8px 16px; border-radius: 8px; font-size: 13px;
+            border: 1px solid #30363d; cursor: pointer;
+            background: #21262d; color: #c9d1d9; transition: all 0.15s;
+        }
+        .profile-modal-footer button:hover { background: #30363d; }
+        .profile-modal-footer button.primary {
+            background: #238636; border-color: #2ea043; color: #fff;
+        }
+        .profile-modal-footer button.primary:hover { background: #2ea043; }
+        .profile-modal-footer button:disabled { opacity: 0.5; cursor: wait; }
+        .profile-modal-footer a.help-link {
+            font-size: 12px; color: #58a6ff; text-decoration: none;
+        }
+        .profile-modal-footer a.help-link:hover { text-decoration: underline; }
+
+        /* 主内容 */
+        .main-container {
+            max-width: 960px; margin: 0 auto;
+            padding: 32px 24px 80px;
+        }
+        .summary-bar {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 32px; padding: 16px 20px;
+            background: rgba(22,27,34,0.6);
+            border: 1px solid rgba(48,54,61,0.4);
+            border-radius: 12px;
+        }
+        .summary-bar .label { color: #8b949e; font-size: 14px; }
+        .summary-bar .value { color: #f0f6fc; font-weight: 600; }
+
+        /* 仓库卡片 */
+        .repo-card {
+            position: relative;
+            background: #161b22;
+            border: 1px solid rgba(48,54,61,0.5);
+            border-radius: 12px;
+            padding: 24px 28px;
+            margin-bottom: 16px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+        .repo-card::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 3px; background: transparent;
+            border-radius: 0 3px 3px 0;
+            transition: background 0.3s ease;
+        }
+        .repo-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(88,166,255,0.3);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4),
+                        0 0 0 1px rgba(88,166,255,0.1);
+        }
+        .repo-card:hover::before {
+            background: linear-gradient(180deg, #58a6ff, #388bfd);
+        }
+
+        .card-header {
+            display: flex; align-items: center; gap: 16px;
+            margin-bottom: 14px;
+        }
+        .rank-badge {
+            flex-shrink: 0;
+            width: 44px; height: 44px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; font-weight: 800; color: #fff;
+            transition: transform 0.2s ease;
+        }
+        .rank-badge:hover { transform: scale(1.1); }
+        .rank-1 { background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+                  box-shadow: 0 4px 16px rgba(255,215,0,0.3); }
+        .rank-2 { background: linear-gradient(135deg, #C0C0C0 0%, #A8A8A8 100%);
+                  box-shadow: 0 4px 16px rgba(192,192,192,0.2); }
+        .rank-3 { background: linear-gradient(135deg, #CD7F32 0%, #B8690E 100%);
+                  box-shadow: 0 4px 16px rgba(205,127,50,0.25); }
+        .rank-4, .rank-5 {
+            background: linear-gradient(135deg, #2d333b 0%, #444c56 100%);
+            border: 1px solid rgba(110,118,129,0.3);
+        }
+        .rank-6, .rank-7, .rank-8, .rank-9, .rank-10 {
+            background: rgba(22,27,34,0.8);
+            border: 1px solid rgba(48,54,61,0.6);
+            font-size: 15px;
+        }
+
+        .repo-name-area { flex: 1; min-width: 0; }
+        .repo-full-name {
+            font-size: 20px; font-weight: 700;
+            color: #58a6ff; word-break: break-all;
+            transition: color 0.2s ease;
+        }
+        .repo-full-name:hover { color: #79c0ff; }
+        .repo-full-name .author { color: #8b949e; font-weight: 400; }
+        .repo-full-name .separator { color: #484f58; margin: 0 2px; }
+
+        .card-desc {
+            color: #8b949e; font-size: 14.5px; line-height: 1.7;
+            margin-bottom: 18px;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .card-desc-zh {
+            color: #c9d1d9; font-size: 15.5px; font-weight: 500;
+            line-height: 1.75; margin-bottom: 8px;
+            -webkit-line-clamp: 2;
+        }
+        .card-desc-en {
+            font-size: 12.5px; color: #6e7681; font-style: italic;
+            line-height: 1.6; margin-bottom: 18px;
+            -webkit-line-clamp: 2;
+        }
+        .card-desc-en.card-desc-only {
+            font-size: 14.5px; color: #c9d1d9; font-style: normal;
+        }
+        .lang-tag {
+            display: inline-block; padding: 1px 7px; margin-right: 8px;
+            font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+            color: #58a6ff; background: rgba(88, 166, 255, 0.12);
+            border: 1px solid rgba(88, 166, 255, 0.3);
+            border-radius: 4px; vertical-align: middle;
+        }
+
+        .card-footer {
+            display: flex; align-items: center; flex-wrap: wrap; gap: 20px;
+        }
+        .stat-item {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 13px; color: #8b949e;
+        }
+        .stat-item .icon { font-size: 16px; line-height: 1; }
+        .lang-dot {
+            display: inline-block;
+            width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+        }
+        .lang-name { font-weight: 500; color: #c9d1d9; }
+
+        .today-stars {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: rgba(240,136,62,0.1);
+            border: 1px solid rgba(240,136,62,0.25);
+            padding: 3px 12px; border-radius: 20px;
+            font-size: 13px; font-weight: 600; color: #f0883e;
+            animation: todayPulse 3s ease-in-out infinite;
+        }
+        @keyframes todayPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(240,136,62,0.15); }
+            50%      { box-shadow: 0 0 12px 4px rgba(240,136,62,0.1); }
+        }
+        .today-stars .arrow-up { font-size: 11px; }
+
+        .contributors {
+            display: inline-flex; align-items: center; margin-left: auto;
+        }
+        .contributors img {
+            width: 24px; height: 24px; border-radius: 50%;
+            border: 2px solid #161b22; margin-left: -6px;
+            transition: transform 0.2s ease;
+        }
+        .contributors img:first-child { margin-left: 0; }
+        .contributors img:hover { transform: scale(1.2); z-index: 1; }
+
+        /* AI 讲解按钮 + 流式输出面板 */
+        .explain-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 5px 12px; border-radius: 6px;
+            font-size: 12.5px; font-weight: 600;
+            color: #c9d1d9;
+            background: linear-gradient(135deg, rgba(31,111,235,0.12) 0%, rgba(139,92,246,0.10) 100%);
+            border: 1px solid rgba(88,166,255,0.3);
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s ease;
+        }
+        .explain-btn:hover {
+            background: linear-gradient(135deg, rgba(31,111,235,0.22) 0%, rgba(139,92,246,0.18) 100%);
+            border-color: rgba(88,166,255,0.55);
+            color: #f0f6fc;
+            transform: translateY(-1px);
+        }
+        .explain-btn:disabled {
+            opacity: 0.55; cursor: not-allowed; transform: none;
+        }
+        .explain-btn .spinner {
+            display: inline-block; width: 12px; height: 12px;
+            border: 2px solid rgba(201,209,217,0.3);
+            border-top-color: #58a6ff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .ai-explain {
+            margin-top: 16px;
+            padding: 14px 18px;
+            background: rgba(31,111,235,0.06);
+            border: 1px solid rgba(88,166,255,0.2);
+            border-radius: 10px;
+            font-size: 14.5px;
+            line-height: 1.75;
+            color: #c9d1d9;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .ai-explain[hidden] { display: none; }
+        .ai-explain .ai-header {
+            display: flex; align-items: center; gap: 8px;
+            margin-bottom: 8px;
+            font-size: 12px; font-weight: 600;
+            color: #58a6ff;
+            letter-spacing: 0.3px;
+        }
+        .ai-explain .ai-output:empty::before {
+            content: '正在加载 README…';
+            color: #6e7681; font-style: italic;
+        }
+        .ai-explain .ai-error {
+            color: #f85149; font-weight: 500;
+        }
+
+        /* AI 聊天面板 */
+        .ai-chat {
+            margin-top: 12px;
+            padding: 14px 16px;
+            background: rgba(110,118,129,0.06);
+            border: 1px solid rgba(110,118,129,0.2);
+            border-radius: 10px;
+        }
+        .ai-chat[hidden] { display: none; }
+        .ai-chat .ai-chat-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 12px; font-weight: 600;
+            color: #8b949e;
+            letter-spacing: 0.3px;
+        }
+        .ai-chat .ai-chat-clear {
+            background: none; border: none; cursor: pointer;
+            color: #6e7681; font-size: 11.5px;
+            padding: 2px 8px; border-radius: 4px;
+            font-family: inherit;
+        }
+        .ai-chat .ai-chat-clear:hover {
+            color: #f85149; background: rgba(248,81,73,0.1);
+        }
+        .ai-chat .ai-chat-messages {
+            max-height: 360px; overflow-y: auto;
+            display: flex; flex-direction: column; gap: 10px;
+            margin-bottom: 12px;
+            padding-right: 4px;
+        }
+        .ai-chat .ai-chat-messages:empty::before {
+            content: '聊聊这个工具吧 — 比如"这玩意儿怎么部署？""能不能帮我做自媒体？""和 YY 有什么区别？"';
+            color: #6e7681; font-style: italic; font-size: 13px;
+            padding: 8px 0;
+        }
+        .ai-chat .msg {
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 14px; line-height: 1.65;
+            white-space: pre-wrap; word-break: break-word;
+            max-width: 88%;
+        }
+        .ai-chat .msg-user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, rgba(31,111,235,0.25), rgba(56,139,253,0.20));
+            color: #f0f6fc;
+            border: 1px solid rgba(88,166,255,0.3);
+            border-bottom-right-radius: 2px;
+        }
+        .ai-chat .msg-assistant {
+            align-self: flex-start;
+            background: rgba(22,27,34,0.7);
+            color: #c9d1d9;
+            border: 1px solid rgba(48,54,61,0.5);
+            border-bottom-left-radius: 2px;
+        }
+        .ai-chat .msg-error {
+            align-self: flex-start;
+            background: rgba(248,81,73,0.1);
+            color: #ffa198;
+            border: 1px solid rgba(248,81,73,0.3);
+        }
+        .ai-chat .msg-thinking {
+            color: #6e7681; font-style: italic; font-size: 13px;
+            padding: 4px 12px;
+        }
+        .ai-chat .ai-chat-input {
+            display: flex; gap: 8px;
+        }
+        .ai-chat .ai-chat-input textarea {
+            flex: 1; min-height: 38px; max-height: 120px;
+            resize: vertical;
+            padding: 8px 12px;
+            background: #0d1117;
+            border: 1px solid rgba(48,54,61,0.6);
+            border-radius: 8px;
+            color: #c9d1d9;
+            font-family: inherit; font-size: 14px;
+            line-height: 1.5;
+        }
+        .ai-chat .ai-chat-input textarea:focus {
+            outline: none;
+            border-color: rgba(88,166,255,0.5);
+        }
+        .ai-chat .ai-chat-input button {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #1f6feb, #388bfd);
+            color: #fff; border: none;
+            border-radius: 8px;
+            font-size: 13.5px; font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: transform 0.1s ease, opacity 0.2s ease;
+        }
+        .ai-chat .ai-chat-input button:hover { transform: translateY(-1px); }
+        .ai-chat .ai-chat-input button:disabled {
+            opacity: 0.5; cursor: not-allowed; transform: none;
+        }
+        .ai-chat-toggle {
+            display: inline-flex; align-items: center; gap: 6px;
+            margin-left: 8px;
+            padding: 4px 10px; border-radius: 6px;
+            font-size: 12px; font-weight: 500;
+            color: #8b949e;
+            background: rgba(110,118,129,0.08);
+            border: 1px solid rgba(110,118,129,0.18);
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s ease;
+        }
+        .ai-chat-toggle:hover {
+            color: #c9d1d9;
+            background: rgba(110,118,129,0.18);
+        }
+        .ai-chat-toggle .badge {
+            display: inline-block; min-width: 18px;
+            padding: 1px 6px;
+            background: rgba(88,166,255,0.25);
+            color: #79c0ff;
+            border-radius: 10px;
+            font-size: 10.5px; font-weight: 700;
+        }
+
+        .page-footer {
+            text-align: center;
+            padding: 40px 24px 32px;
+            color: #484f58; font-size: 13px;
+        }
+        .page-footer .divider {
+            width: 60px; height: 1px;
+            background: rgba(48,54,61,0.6);
+            margin: 0 auto 16px;
+        }
+
+        @media (max-width: 768px) {
+            .top-bar-inner { flex-direction: column; gap: 12px; }
+            .main-container { padding: 20px 16px 60px; }
+            .repo-card { padding: 18px 16px; }
+            .card-header { gap: 12px; }
+            .tab-bar { flex-wrap: wrap; gap: 6px; }
+            .tab-btn { padding: 8px 12px; font-size: 12px; }
+            .tab-source { display: none; }
+        }
+
+        /* Tab 切换条 */
+        .tab-bar {
+            display: flex; gap: 8px; margin: 24px 0 20px;
+            padding: 6px; background: rgba(22,27,34,0.6);
+            border: 1px solid rgba(48,54,61,0.6);
+            border-radius: 12px;
+        }
+        .tab-btn {
+            flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+            padding: 12px 16px; border-radius: 8px;
+            background: transparent; border: 1px solid transparent;
+            color: #8b949e; cursor: pointer;
+            transition: all 0.25s ease;
+            font-family: inherit; font-size: 14px;
+        }
+        .tab-btn:hover {
+            background: rgba(110,118,129,0.08);
+            color: #c9d1d9;
+        }
+        .tab-btn.active {
+            background: linear-gradient(135deg, rgba(31,111,235,0.15) 0%, rgba(56,139,253,0.10) 100%);
+            border-color: rgba(56,139,253,0.4);
+            color: #f0f6fc;
+            box-shadow: 0 0 0 1px rgba(56,139,253,0.2);
+        }
+        .tab-label { font-weight: 600; }
+        .tab-badge {
+            font-size: 10px; font-weight: 700;
+            padding: 2px 8px; border-radius: 10px;
+            background: rgba(240,136,62,0.15);
+            color: #f0883e;
+            letter-spacing: 0.5px;
+        }
+        .tab-btn.active .tab-badge {
+            background: rgba(240,136,62,0.25);
+            color: #ffa657;
+        }
+        .tab-source {
+            font-size: 11px; opacity: 0.85;
+            font-weight: 500;
+        }
+        .src-realtime { color: #3fb950; }
+        .src-cache { color: #8b949e; }
+
+        /* Tab 面板 */
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center; padding: 80px 20px;
+            color: #6e7681; background: rgba(22,27,34,0.4);
+            border-radius: 12px; border: 1px dashed rgba(48,54,61,0.6);
+        }
+        .empty-state p { margin: 4px 0; }
+        .empty-hint { font-size: 13px; opacity: 0.7; }
+            .rank-badge { width: 36px; height: 36px; font-size: 15px; }
+            .repo-full-name { font-size: 17px; }
+            .card-footer { gap: 12px; }
+            .contributors { margin-left: 0; margin-top: 4px; }
+            .summary-bar { flex-direction: column; gap: 8px; text-align: center; }
+        }
+        @media (max-width: 480px) {
+            .top-bar-title h1 { font-size: 16px; }
+            .date-badge { font-size: 12px !important; }
+            .nav-btn { padding: 6px 10px; font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="top-bar">
+        <div class="top-bar-inner">
+            <div class="top-bar-title">
+                <span class="fire-icon">🔥</span>
+                <h1>GitHub Trending</h1>
+                <span class="date-badge">{{ display_date }}</span>
+            </div>
+            <nav class="top-bar-nav">
+                {% if prev_path %}
+                    <a class="nav-btn" href="{{ prev_path }}">◀ 前一天</a>
+                {% else %}
+                    <span class="nav-btn disabled">◀ 前一天</span>
+                {% endif %}
+                <a class="nav-btn" href="{{ index_path }}">📋 索引</a>
+                {% if next_path %}
+                    <a class="nav-btn" href="{{ next_path }}">后一天 ▶</a>
+                {% else %}
+                    <span class="nav-btn disabled">后一天 ▶</span>
+                {% endif %}
+                <button class="settings-btn" id="open-profile-modal" title="设置">⚙️ 设置</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main-container">
+        <div class="summary-bar">
+            <span class="label">数据来源：<span class="value">github.com/trending</span></span>
+            <span class="label">收录数量：<span class="value">三档窗口</span></span>
+            <span class="label">抓取时间：<span class="value">{{ fetch_time }}</span></span>
+        </div>
+
+        <!-- Tab 切换条 -->
+        <div class="tab-bar">
+            {% for tab in tabs %}
+            <button class="tab-btn {% if loop.first %}active{% endif %}"
+                    data-target="tab-{{ tab.since }}"
+                    onclick="switchTab('{{ tab.since }}')">
+                <span class="tab-label">{{ tab.label }}</span>
+                <span class="tab-badge">{{ tab.badge }}</span>
+                <span class="tab-source {% if tab.is_realtime %}src-realtime{% else %}src-cache{% endif %}">
+                    {% if tab.is_realtime %}● 实时{% else %}● {{ tab.source }} {{ tab.updated }}{% endif %}
+                </span>
+            </button>
+            {% endfor %}
+        </div>
+
+        <!-- 三个 Tab 内容面板 -->
+        {% for tab in tabs %}
+        <div class="tab-panel {% if loop.first %}active{% endif %}"
+             id="tab-{{ tab.since }}"
+             data-panel="{{ tab.since }}">
+            {% if tab.repos | length == 0 %}
+            <div class="empty-state">
+                <p>📭 该榜单暂无数据</p>
+                <p class="empty-hint">{{ tab.source }}（{{ tab.updated }}）</p>
+            </div>
+            {% else %}
+            {% for repo in tab.repos %}
+            <div class="repo-card">
+                <div class="card-header">
+                    <div class="rank-badge rank-{{ repo.rank }}">{{ repo.rank }}</div>
+                    <div class="repo-name-area">
+                        <a class="repo-full-name" href="{{ repo.url }}" target="_blank" rel="noopener noreferrer">
+                            <span class="author">{{ repo.author }}</span><span class="separator">/</span><span>{{ repo.name }}</span>
+                        </a>
+                    </div>
+                </div>
+                {% if repo.description_zh %}
+                <p class="card-desc card-desc-zh">{{ repo.description_zh }}</p>
+                {% endif %}
+                {% if repo.description %}
+                <p class="card-desc card-desc-en{% if not repo.description_zh %} card-desc-only{% endif %}">
+                    <span class="lang-tag">EN</span>{{ repo.description }}
+                </p>
+                {% endif %}
+                <div class="card-footer">
+                    {% if repo.language %}
+                    <span class="stat-item">
+                        <span class="lang-dot" style="background-color: {{ repo.language_color }};"></span>
+                        <span class="lang-name">{{ repo.language }}</span>
+                    </span>
+                    {% endif %}
+                    {% if repo.stars %}
+                    <span class="stat-item">
+                        <span class="icon">⭐</span><span>{{ repo.stars }}</span>
+                    </span>
+                    {% endif %}
+                    {% if repo.forks %}
+                    <span class="stat-item">
+                        <span class="icon">🍴</span><span>{{ repo.forks }}</span>
+                    </span>
+                    {% endif %}
+                    {% if repo.today_stars and repo.today_stars != "0" %}
+                    <span class="today-stars">
+                        <span class="arrow-up">▲</span>{{ repo.today_stars }} stars today
+                    </span>
+                    {% endif %}
+                    {% if repo.contributors %}
+                    <span class="contributors">
+                        {% for c in repo.contributors %}
+                        <img src="{{ c.src }}" alt="{{ c.alt }}" loading="lazy">
+                        {% endfor %}
+                    </span>
+                    {% endif %}
+                    <button type="button" class="explain-btn"
+                            data-repo="{{ repo.author }}/{{ repo.name }}">
+                        🤖 让 AI 讲解
+                    </button>
+                </div>
+                <div class="ai-explain" data-state="idle" hidden>
+                    <div class="ai-header">
+                        <span>🤖</span><span>AI 讲解 · {{ repo.author }}/{{ repo.name }}</span>
+                    </div>
+                    <div class="ai-output"></div>
+                </div>
+                <button type="button" class="ai-chat-toggle"
+                        data-repo="{{ repo.author }}/{{ repo.name }}">
+                    💬 和 AI 聊聊 <span class="badge" data-count>0</span>
+                </button>
+                <div class="ai-chat" data-repo="{{ repo.author }}/{{ repo.name }}" data-state="idle" hidden>
+                    <div class="ai-chat-header">
+                        <span>💬 对话 · {{ repo.author }}/{{ repo.name }}</span>
+                        <button type="button" class="ai-chat-clear" title="清空对话">🗑 清空</button>
+                    </div>
+                    <div class="ai-chat-messages"></div>
+                    <div class="ai-chat-input">
+                        <textarea placeholder="问点什么… (Shift+Enter 换行)" rows="1"></textarea>
+                        <button type="button" class="ai-chat-send">发送</button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+        </div>
+        {% endfor %}
+    </main>
+
+    <footer class="page-footer">
+        <div class="divider"></div>
+        <p>GitHub Trending Daily · {{ date_str }}</p>
+        <p style="margin-top: 4px;">Generated at {{ fetch_time }}</p>
+    </footer>
+
+    <script>
+        function switchTab(since) {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.target === 'tab-' + since);
+            });
+            document.querySelectorAll('.tab-panel').forEach(panel => {
+                panel.classList.toggle('active', panel.id === 'tab-' + since);
+            });
+            try {
+                localStorage.setItem('gt_active_tab', since);
+            } catch (e) {}
+        }
+        // 记忆上次打开的 Tab
+        (function() {
+            try {
+                const saved = localStorage.getItem('gt_active_tab');
+                if (saved && document.getElementById('tab-' + saved)) {
+                    switchTab(saved);
+                }
+            } catch (e) {}
+        })();
+
+        // AI 讲解按钮：流式 SSE 消费
+        (function() {
+            const BTN_LABEL = '🤖 让 AI 讲解';
+            document.addEventListener('click', async function(ev) {
+                const btn = ev.target.closest('.explain-btn');
+                if (!btn) return;
+                ev.preventDefault();
+                const card = btn.closest('.repo-card');
+                if (!card) return;
+                const panel = card.querySelector('.ai-explain');
+                const output = card.querySelector('.ai-output');
+                const repo = btn.dataset.repo;
+                if (!panel || !output || !repo) return;
+
+                // 已加载过则只切换显隐
+                if (panel.dataset.state === 'done') {
+                    panel.hidden = !panel.hidden;
+                    btn.textContent = panel.hidden ? BTN_LABEL : '🙈 收起讲解';
+                    return;
+                }
+                if (panel.dataset.state === 'loading') return;
+
+                panel.hidden = false;
+                panel.dataset.state = 'loading';
+                output.textContent = '';
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span>讲解中…';
+
+                try {
+                    const resp = await fetch('http://127.0.0.1:8765/explain', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ repo: repo })
+                    });
+                    if (!resp.ok || !resp.body) {
+                        throw new Error('HTTP ' + resp.status);
+                    }
+
+                    const reader = resp.body.getReader();
+                    const decoder = new TextDecoder('utf-8');
+                    let buffer = '';
+                    let receivedAny = false;
+                    let firstError = null;
+
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+                        buffer += decoder.decode(value, { stream: true });
+
+                        // 按空行切分事件
+                        let idx;
+                        while ((idx = buffer.indexOf('\n\n')) !== -1) {
+                            const chunk = buffer.slice(0, idx);
+                            buffer = buffer.slice(idx + 2);
+                            const line = chunk.split('\n').find(l => l.startsWith('data:'));
+                            if (!line) continue;
+                            const payload = line.slice(5).trim();
+                            if (!payload) continue;
+                            let evt;
+                            try { evt = JSON.parse(payload); }
+                            catch (e) { continue; }
+
+                            if (evt.type === 'start') {
+                                if (!evt.readme_url) {
+                                    output.innerHTML = '';
+                                    const warn = document.createElement('div');
+                                    warn.style.cssText = 'color:#8b949e;font-size:12.5px;margin-bottom:6px;';
+                                    warn.textContent = '⚠️ 未取到 README，模型将凭印象讲解（关键信息会说"不知道"）。';
+                                    output.appendChild(warn);
+                                }
+                            } else if (evt.type === 'delta') {
+                                receivedAny = true;
+                                output.appendChild(document.createTextNode(evt.content || ''));
+                                output.scrollTop = output.scrollHeight;
+                            } else if (evt.type === 'error') {
+                                firstError = evt.message || '上游错误';
+                            } else if (evt.type === 'done') {
+                                panel.dataset.state = 'done';
+                            }
+                        }
+                    }
+
+                    if (firstError) throw new Error(firstError);
+                    if (!receivedAny) throw new Error('未收到任何内容');
+
+                    panel.dataset.state = 'done';
+                    btn.innerHTML = '🙈 收起讲解';
+                } catch (err) {
+                    panel.dataset.state = 'done';
+                    output.innerHTML = '';
+                    const msg = document.createElement('div');
+                    msg.className = 'ai-error';
+                    msg.textContent = '❌ 讲解失败：' + err.message + '。请确认后端 server.py 已启动（http://127.0.0.1:8765/health）。';
+                    output.appendChild(msg);
+                    btn.innerHTML = '🔄 重试';
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+        })();
+
+        // AI 聊天面板：多轮对话，本地保存到 server.py
+        (function() {
+            const BACKEND = 'http://127.0.0.1:8765';
+
+            function escapeHtml(s) {
+                return s.replace(/[&<>"']/g, c => ({
+                    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+                })[c]);
+            }
+
+            function renderMessage(container, role, content) {
+                const div = document.createElement('div');
+                div.className = 'msg msg-' + role;
+                div.textContent = content;
+                container.appendChild(div);
+                container.scrollTop = container.scrollHeight;
+                return div;
+            }
+
+            function renderMessages(container, messages) {
+                container.innerHTML = '';
+                for (const m of messages) {
+                    if (m.role === 'user' || m.role === 'assistant') {
+                        renderMessage(container, m.role, m.content);
+                    }
+                }
+                container.scrollTop = container.scrollHeight;
+            }
+
+            function updateBadge(toggle, count) {
+                const badge = toggle.querySelector('[data-count]');
+                if (badge) badge.textContent = String(count);
+            }
+
+            async function loadHistory(panel, toggle) {
+                const repo = panel.dataset.repo;
+                try {
+                    const resp = await fetch(`${BACKEND}/chat/${repo}`);
+                    if (!resp.ok) return;
+                    const data = await resp.json();
+                    const messages = data.messages || [];
+                    renderMessages(panel.querySelector('.ai-chat-messages'), messages);
+                    updateBadge(toggle, messages.filter(m => m.role === 'user').length);
+                } catch (e) {
+                    // server unreachable - leave empty
+                }
+            }
+
+            // Toggle button
+            document.addEventListener('click', async function(ev) {
+                const toggle = ev.target.closest('.ai-chat-toggle');
+                if (!toggle) return;
+                ev.preventDefault();
+                const card = toggle.closest('.repo-card');
+                const panel = card.querySelector('.ai-chat');
+                if (!panel) return;
+                if (panel.hidden) {
+                    panel.hidden = false;
+                    toggle.innerHTML = '💬 收起对话 <span class="badge" data-count>' +
+                        (toggle.querySelector('[data-count]')?.textContent || '0') + '</span>';
+                    if (panel.dataset.state === 'idle') {
+                        panel.dataset.state = 'loaded';
+                        await loadHistory(panel, toggle);
+                    }
+                    // Focus input
+                    setTimeout(() => {
+                        const ta = panel.querySelector('textarea');
+                        if (ta) ta.focus();
+                    }, 50);
+                } else {
+                    panel.hidden = true;
+                    toggle.innerHTML = '💬 和 AI 聊聊 <span class="badge" data-count>' +
+                        (toggle.querySelector('[data-count]')?.textContent || '0') + '</span>';
+                }
+            });
+
+            // Clear button
+            document.addEventListener('click', async function(ev) {
+                if (!ev.target.classList?.contains('ai-chat-clear')) return;
+                ev.preventDefault();
+                const panel = ev.target.closest('.ai-chat');
+                if (!panel) return;
+                const repo = panel.dataset.repo;
+                const card = panel.closest('.repo-card');
+                const toggle = card?.querySelector('.ai-chat-toggle');
+                if (!confirm('清空这个工具的对话历史？')) return;
+                try {
+                    await fetch(`${BACKEND}/chat/${repo}`, { method: 'DELETE' });
+                } catch (e) {}
+                panel.querySelector('.ai-chat-messages').innerHTML = '';
+                if (toggle) updateBadge(toggle, 0);
+            });
+
+            // Send message
+            document.addEventListener('click', async function(ev) {
+                if (!ev.target.classList?.contains('ai-chat-send')) return;
+                ev.preventDefault();
+                const panel = ev.target.closest('.ai-chat');
+                if (!panel) return;
+                await sendMessage(panel, ev.target);
+            });
+
+            // Enter to send (Shift+Enter for newline)
+            document.addEventListener('keydown', async function(ev) {
+                if (ev.key !== 'Enter' || ev.shiftKey) return;
+                const ta = ev.target;
+                if (ta.tagName !== 'TEXTAREA') return;
+                const panel = ta.closest('.ai-chat');
+                if (!panel) return;
+                ev.preventDefault();
+                const btn = panel.querySelector('.ai-chat-send');
+                await sendMessage(panel, btn);
+            });
+
+            async function sendMessage(panel, btn) {
+                if (!btn || btn.disabled) return;
+                const textarea = panel.querySelector('textarea');
+                const content = (textarea.value || '').trim();
+                if (!content) return;
+
+                const repo = panel.dataset.repo;
+                const messagesEl = panel.querySelector('.ai-chat-messages');
+                const toggle = panel.closest('.repo-card').querySelector('.ai-chat-toggle');
+
+                // Render user message immediately
+                renderMessage(messagesEl, 'user', content);
+                textarea.value = '';
+                textarea.style.height = 'auto';
+
+                // Disable input while waiting
+                btn.disabled = true;
+                textarea.disabled = true;
+
+                // Thinking placeholder
+                const thinkingEl = document.createElement('div');
+                thinkingEl.className = 'msg msg-thinking';
+                thinkingEl.textContent = '思考中…';
+                messagesEl.appendChild(thinkingEl);
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+
+                try {
+                    const resp = await fetch(`${BACKEND}/chat/${repo}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: content })
+                    });
+                    if (!resp.ok || !resp.body) {
+                        throw new Error('HTTP ' + resp.status);
+                    }
+                    const reader = resp.body.getReader();
+                    const decoder = new TextDecoder('utf-8');
+                    let buffer = '';
+                    let assistantEl = null;
+                    let gotAnyDelta = false;
+                    let firstError = null;
+
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+                        buffer += decoder.decode(value, { stream: true });
+                        let idx;
+                        while ((idx = buffer.indexOf('\n\n')) !== -1) {
+                            const chunk = buffer.slice(0, idx);
+                            buffer = buffer.slice(idx + 2);
+                            const line = chunk.split('\n').find(l => l.startsWith('data:'));
+                            if (!line) continue;
+                            const payload = line.slice(5).trim();
+                            if (!payload) continue;
+                            let evt;
+                            try { evt = JSON.parse(payload); }
+                            catch (e) { continue; }
+
+                            if (evt.type === 'start') {
+                                // Remove thinking placeholder, prep assistant bubble
+                                thinkingEl.remove();
+                                assistantEl = document.createElement('div');
+                                assistantEl.className = 'msg msg-assistant';
+                                messagesEl.appendChild(assistantEl);
+                            } else if (evt.type === 'delta') {
+                                if (!assistantEl) {
+                                    thinkingEl.remove();
+                                    assistantEl = document.createElement('div');
+                                    assistantEl.className = 'msg msg-assistant';
+                                    messagesEl.appendChild(assistantEl);
+                                }
+                                gotAnyDelta = true;
+                                assistantEl.textContent += evt.content || '';
+                                messagesEl.scrollTop = messagesEl.scrollHeight;
+                            } else if (evt.type === 'error') {
+                                firstError = evt.message || '上游错误';
+                            } else if (evt.type === 'done') {
+                                // Stream complete - refresh badge
+                                const turnCount = messagesEl.querySelectorAll('.msg-user').length;
+                                if (toggle) updateBadge(toggle, turnCount);
+                            }
+                        }
+                    }
+
+                    if (firstError) throw new Error(firstError);
+                    if (!gotAnyDelta) throw new Error('未收到任何内容');
+                } catch (err) {
+                    thinkingEl.remove();
+                    const errEl = document.createElement('div');
+                    errEl.className = 'msg msg-error';
+                    errEl.textContent = '❌ ' + err.message + '（请确认 server.py 已在 http://127.0.0.1:8765 运行）';
+                    messagesEl.appendChild(errEl);
+                } finally {
+                    btn.disabled = false;
+                    textarea.disabled = false;
+                    textarea.focus();
+                }
+            }
+        })();
+    </script>
+
+    <div class="profile-modal-bg" id="profile-modal-bg">
+        <div class="profile-modal" onclick="event.stopPropagation()">
+            <div class="profile-modal-header">
+                <h2>⚙️ 设置</h2>
+                <button class="profile-modal-close" id="profile-close" title="关闭 (Esc)">×</button>
+            </div>
+            <div class="settings-tabs" role="tablist">
+                <button class="settings-tab active" data-tab="profile" role="tab">👤 用户职业</button>
+                <button class="settings-tab" data-tab="baidu" role="tab">🌐 翻译 API</button>
+                <button class="settings-tab" data-tab="agent" role="tab">🤖 agent API</button>
+            </div>
+
+            <div class="settings-tab-panel active" data-panel="profile" role="tabpanel">
+                <p class="hint">这段文字会作为「听众画像」发给 AI，让讲解贴近你的背景。改完保存即生效，<b>不用重启服务</b>。提示：可以用 Markdown 项目符号（比如「- 职业：…」），描述得越具体，讲解越对口。</p>
+                <textarea id="profile-textarea" spellcheck="false" placeholder="- 职业：…&#10;- 技术栈：…&#10;- 当前关注方向：…&#10;- 痛点：…"></textarea>
+            </div>
+
+            <div class="settings-tab-panel" data-panel="baidu" role="tabpanel">
+                <p class="hint">把 GitHub 项目描述翻译成中文。使用<b>百度翻译</b>（通用、稳定、有免费额度）。申请：<a class="help-link" href="https://api.fanyi.baidu.com/" target="_blank" rel="noopener">api.fanyi.baidu.com</a>。保存后当天的下一次抓取即生效。</p>
+                <label class="field-label">百度 APPID</label>
+                <input type="text" id="baidu-appid" autocomplete="off" spellcheck="false" placeholder="例如：20250812002428976">
+                <label class="field-label">百度 密钥</label>
+                <div class="input-row">
+                    <input type="password" id="baidu-key" autocomplete="off" spellcheck="false" placeholder="例如：zZg0tEgl0hEYBt8Ainnq">
+                    <button class="toggle-vis" data-target="baidu-key" type="button">显示</button>
+                </div>
+            </div>
+
+            <div class="settings-tab-panel" data-panel="agent" role="tabpanel">
+                <p class="hint">用于「🤖 让 AI 讲解」和「💬 和 AI 聊聊」。支持所有 <b>OpenAI 兼容协议</b>的服务（选个预设就行，模型和地址会自动填好，填你的 Key 即可）。要接没列出的厂商或本地 Ollama/vLLM？选「自定义」手动填。保存后下次请求即生效。</p>
+                <label class="field-label">服务商</label>
+                <select id="agent-provider">
+                    <option value="minimax">minimax（MiniMax-M3）</option>
+                    <option value="deepseek">DeepSeek（deepseek-chat）</option>
+                    <option value="moonshot">月之暗面 Moonshot / Kimi（moonshot-v1-8k）</option>
+                    <option value="zhipu">智谱 GLM（glm-4-flash）</option>
+                    <option value="qwen">通义千问 DashScope（qwen-turbo）</option>
+                    <option value="baiduqianfan">百度千帆（ernie-speed，OpenAI 兼容端点）</option>
+                    <option value="yi">零一万物 Yi（yi-large）</option>
+                    <option value="openai">OpenAI（gpt-4o-mini）</option>
+                    <option value="ollama">本地 Ollama（http://127.0.0.1:11434/v1）</option>
+                    <option value="openrouter">OpenRouter（openai/gpt-4o-mini）</option>
+                    <option value="custom">自定义 OpenAI 兼容端点</option>
+                </select>
+                <label class="field-label">API Base URL</label>
+                <input type="text" id="agent-api-base" autocomplete="off" spellcheck="false" placeholder="https://…/v1">
+                <label class="field-label">模型名</label>
+                <input type="text" id="agent-model" autocomplete="off" spellcheck="false" placeholder="例如：MiniMax-M3 / deepseek-chat / gpt-4o-mini">
+                <label class="field-label">API Key</label>
+                <div class="input-row">
+                    <input type="password" id="agent-api-key" autocomplete="off" spellcheck="false" placeholder="sk-…">
+                    <button class="toggle-vis" data-target="agent-api-key" type="button">显示</button>
+                </div>
+            </div>
+
+            <div class="profile-modal-footer">
+                <span class="status" id="profile-status"></span>
+                <button id="profile-cancel">关闭</button>
+                <button class="primary" id="profile-save">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const BACKEND = 'http://127.0.0.1:8765';
+            const bg = document.getElementById('profile-modal-bg');
+            const statusEl = document.getElementById('profile-status');
+            const openBtn = document.getElementById('open-profile-modal');
+            const saveBtn = document.getElementById('profile-save');
+            const closeBtn = document.getElementById('profile-close');
+            const cancelBtn = document.getElementById('profile-cancel');
+            const tabs = document.querySelectorAll('.settings-tab');
+            const panels = document.querySelectorAll('.settings-tab-panel');
+            const profileTA = document.getElementById('profile-textarea');
+            const translationProvider = null;  // removed in v1.8 — Baidu is fixed
+            const baiduAppid = document.getElementById('baidu-appid');
+            const baiduKey = document.getElementById('baidu-key');
+            const agentProvider = document.getElementById('agent-provider');
+            const agentApiBase = document.getElementById('agent-api-base');
+            const agentModel = document.getElementById('agent-model');
+            const agentApiKey = document.getElementById('agent-api-key');
+
+            // Provider presets — keep in sync with server.py PROVIDER_PRESETS.
+            const PRESETS = {
+                minimax:      { api_base: 'https://api.minimaxi.com/v1',         model: 'MiniMax-M3' },
+                deepseek:     { api_base: 'https://api.deepseek.com/v1',          model: 'deepseek-chat' },
+                moonshot:     { api_base: 'https://api.moonshot.cn/v1',           model: 'moonshot-v1-8k' },
+                zhipu:        { api_base: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-flash' },
+                qwen:         { api_base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-turbo' },
+                baiduqianfan: { api_base: 'https://qianfan.baidubce.com/v2',      model: 'ernie-speed' },
+                yi:           { api_base: 'https://api.lingyiwanwu.com/v1',      model: 'yi-large' },
+                openai:       { api_base: 'https://api.openai.com/v1',            model: 'gpt-4o-mini' },
+                ollama:       { api_base: 'http://127.0.0.1:11434/v1',           model: 'llama3.1' },
+                openrouter:   { api_base: 'https://openrouter.ai/api/v1',         model: 'openai/gpt-4o-mini' },
+                custom:       { api_base: '',                                      model: '' },
+            };
+
+            // Whether each field was changed from its loaded value (so we only
+            // send non-default values back to the server).
+            const dirty = {
+                baiduAppid: false, baiduKey: false,
+                agentProvider: false, agentApiBase: false,
+                agentModel: false, agentApiKey: false,
+                translationProvider: false, // legacy field; no longer editable
+            };
+
+            let activeTab = 'profile';
+
+            function setStatus(text, kind) {
+                statusEl.textContent = text;
+                statusEl.className = 'status' + (kind ? ' ' + kind : '');
+            }
+
+            function switchTab(name) {
+                activeTab = name;
+                tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+                panels.forEach(p => p.classList.toggle('active', p.dataset.panel === name));
+            }
+
+            tabs.forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+
+            document.querySelectorAll('.toggle-vis').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const target = document.getElementById(btn.dataset.target);
+                    if (!target) return;
+                    const isPwd = target.type === 'password';
+                    target.type = isPwd ? 'text' : 'password';
+                    btn.textContent = isPwd ? '隐藏' : '显示';
+                });
+            });
+
+            // Track field changes so we only POST non-empty values to the server
+            // (empty value would be treated as "leave alone" by the backend).
+            ['baiduAppid', 'baiduKey', 'agentApiBase', 'agentModel', 'agentApiKey'].forEach(k => {
+                const el = ({baiduAppid, baiduKey, agentApiBase, agentModel, agentApiKey})[k];
+                el.addEventListener('input', () => { dirty[k] = true; });
+            });
+            // translationProvider removed in v1.8 — Baidu is fixed
+            agentProvider.addEventListener('change', () => {
+                dirty.agentProvider = true;
+                // Auto-fill base URL + model when user picks a preset (don't
+                // clobber the field once they've typed something custom).
+                const preset = PRESETS[agentProvider.value];
+                if (!preset) return;
+                if (!dirty.agentApiBase || !agentApiBase.value.trim()) {
+                    agentApiBase.value = preset.api_base;
+                    dirty.agentApiBase = true;
+                }
+                if (!dirty.agentModel || !agentModel.value.trim()) {
+                    agentModel.value = preset.model;
+                    dirty.agentModel = true;
+                }
+            });
+
+            async function loadAll() {
+                setStatus('加载中…', '');
+                saveBtn.disabled = true; cancelBtn.disabled = true;
+                try {
+                    const rp = await fetch(BACKEND + '/profile');
+                    if (!rp.ok) throw new Error('profile HTTP ' + rp.status);
+                    const dp = await rp.json();
+                    profileTA.value = dp.content || '';
+
+                    const rc = await fetch(BACKEND + '/settings/credentials');
+                    if (!rc.ok) throw new Error('credentials HTTP ' + rc.status);
+                    const dc = await rc.json();
+                    translationProvider; // unused — Baidu fixed in v1.8
+                    baiduAppid.value = dc.baidu_appid || '';
+                    baiduKey.value = dc.baidu_key || '';
+                    agentProvider.value = dc.agent_provider || 'minimax';
+                    agentApiBase.value = dc.agent_api_base || '';
+                    agentModel.value = dc.agent_model || '';
+                    agentApiKey.value = dc.agent_api_key || '';
+
+                    // Reset dirty flags — current values are the baseline.
+                    Object.keys(dirty).forEach(k => { dirty[k] = false; });
+
+                    setStatus('（已加载，点保存生效）', '');
+                } catch (err) {
+                    setStatus('加载失败：' + err.message + '（请确认 server.py 已在 127.0.0.1:8765 运行）', 'error');
+                } finally {
+                    saveBtn.disabled = false; cancelBtn.disabled = false;
+                }
+            }
+
+            async function openModal() {
+                bg.classList.add('open');
+                switchTab('profile');
+                await loadAll();
+            }
+
+            function closeModal() {
+                bg.classList.remove('open');
+                setStatus('', '');
+            }
+
+            async function saveAll() {
+                saveBtn.disabled = true; cancelBtn.disabled = true;
+                setStatus('保存中…', '');
+                try {
+                    const profContent = profileTA.value;
+                    if (!profContent.trim()) {
+                        setStatus('「用户职业」内容不能为空', 'error');
+                        return;
+                    }
+                    const r1 = await fetch(BACKEND + '/profile', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: profContent })
+                    });
+                    if (!r1.ok) {
+                        const t = await r1.text();
+                        throw new Error('profile: ' + (t || r1.status));
+                    }
+
+                    const creds = {};
+                    if (false && dirty.translationProvider) creds.translation_provider = ''; // legacy
+                    if (dirty.baiduAppid && baiduAppid.value.trim()) creds.baidu_appid = baiduAppid.value.trim();
+                    if (dirty.baiduKey && baiduKey.value.trim()) creds.baidu_key = baiduKey.value.trim();
+                    if (dirty.agentProvider) creds.agent_provider = agentProvider.value;
+                    if (dirty.agentApiBase && agentApiBase.value.trim()) creds.agent_api_base = agentApiBase.value.trim();
+                    if (dirty.agentModel && agentModel.value.trim()) creds.agent_model = agentModel.value.trim();
+                    if (dirty.agentApiKey && agentApiKey.value.trim()) creds.agent_api_key = agentApiKey.value.trim();
+
+                    if (Object.keys(creds).length > 0) {
+                        const r2 = await fetch(BACKEND + '/settings/credentials', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(creds)
+                        });
+                        if (!r2.ok) {
+                            const t = await r2.text();
+                            throw new Error('credentials: ' + (t || r2.status));
+                        }
+                    }
+
+                    setStatus('✓ 已保存，立即生效', 'success');
+                    setTimeout(closeModal, 800);
+                } catch (err) {
+                    setStatus('保存失败：' + err.message, 'error');
+                } finally {
+                    saveBtn.disabled = false; cancelBtn.disabled = false;
+                }
+            }
+
+            openBtn.addEventListener('click', openModal);
+            closeBtn.addEventListener('click', closeModal);
+            cancelBtn.addEventListener('click', closeModal);
+            saveBtn.addEventListener('click', saveAll);
+            bg.addEventListener('click', (e) => { if (e.target === bg) closeModal(); });
+            document.addEventListener('keydown', (e) => {
+                if (!bg.classList.contains('open')) return;
+                if (e.key === 'Escape') closeModal();
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) saveAll();
+            });
+        })();
+    </script>
+</body>
+</html>
