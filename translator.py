@@ -10,7 +10,7 @@
 
 环境变量：
     BAIDU_APPID            必填，开发者信息里的应用 ID
-    BAIDU_TRANSLATE_KEY    必填，密钥（你给的 yvxV_d8t0bs8kiv21q30o0jg0）
+    BAIDU_TRANSLATE_KEY    必填，密钥（在百度翻译开放平台申请）
 
 QPS 限制：
     标准版 QPS=1，所以批量翻译每条间隔 ~1.1s，避免触发 54003 限流。
