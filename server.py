@@ -15,7 +15,10 @@ Endpoints:
 import json
 import os
 import re
+import subprocess
 import sys
+import threading
+import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.request import Request, urlopen
@@ -370,6 +373,117 @@ def clear_chat(owner: str, repo: str) -> None:
         os.remove(p)
 
 
+# ═══════════════════════════════════════
+# /refresh 立即抓取（异步跑 run.py）
+# ═══════════════════════════════════════
+REFRESH_LOCK = threading.Lock()
+REFRESH_STATE = {
+    "running": False,
+    "started_at": None,         # ISO timestamp
+    "finished_at": None,
+    "ok": None,                 # True / False / None while running
+    "returncode": None,
+    "log_tail": [],             # last ~30 lines of stdout
+    "html_path": None,          # 成功后新生成的 HTML 绝对路径
+    "html_url": None,           # 浏览器可访问的 file:// URL
+    "trigger": "manual",        # 保留字段，便于以后区分 manual / scheduled
+}
+REFRESH_LOG_MAX = 30
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+RUN_SCRIPT = os.path.join(PROJECT_DIR, "run.py")
+
+
+def _run_refresh_async():
+    """Worker thread: 执行 python run.py，捕获输出，更新 REFRESH_STATE。"""
+    REFRESH_STATE["log_tail"] = []
+    try:
+        # 在 Windows 上强制 UTF-8 输出，避免 emoji 编码炸
+        creationflags = 0
+        if sys.platform == "win32":
+            creationflags = subprocess.CREATE_NO_WINDOW
+
+        # 把当前进程环境拷给子进程，必要时强制注入 INSECURE
+        # （server.py 不是从 run.bat 启动的，默认没有这个变量；
+        #  而 run.py 依赖它来跳过 GitHub 证书校验。）
+        child_env = os.environ.copy()
+        if not child_env.get("GITHUB_TRENDING_INSECURE"):
+            child_env["GITHUB_TRENDING_INSECURE"] = "1"
+
+        proc = subprocess.Popen(
+            [sys.executable, RUN_SCRIPT],
+            cwd=PROJECT_DIR,
+            env=child_env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            creationflags=creationflags,
+        )
+
+        # 流式读取输出（保留最后 REFRESH_LOG_MAX 行）
+        for line in proc.stdout:
+            line = line.rstrip("\n")
+            if not line:
+                continue
+            tail = REFRESH_STATE["log_tail"]
+            tail.append(line)
+            if len(tail) > REFRESH_LOG_MAX:
+                del tail[:len(tail) - REFRESH_LOG_MAX]
+        proc.wait()
+        REFRESH_STATE["returncode"] = proc.returncode
+        REFRESH_STATE["ok"] = (proc.returncode == 0)
+
+        if REFRESH_STATE["ok"]:
+            # 找到今天生成的 HTML
+            today = datetime.now()
+            html_abs = os.path.join(
+                PROJECT_DIR, "pages",
+                f"{today.year}", f"{today.month:02d}", f"{today.strftime('%Y-%m-%d')}.html",
+            )
+            if os.path.exists(html_abs):
+                REFRESH_STATE["html_path"] = html_abs
+                REFRESH_STATE["html_url"] = "file:///" + html_abs.replace("\\", "/").lstrip("/")
+    except Exception as e:
+        REFRESH_STATE["log_tail"].append(f"[server] 启动失败: {e}")
+        REFRESH_STATE["ok"] = False
+        REFRESH_STATE["returncode"] = -1
+    finally:
+        REFRESH_STATE["running"] = False
+        REFRESH_STATE["finished_at"] = datetime.now().isoformat(timespec="seconds")
+
+
+def start_refresh() -> dict:
+    """同步入口：尝试启动抓取。返回状态快照。"""
+    with REFRESH_LOCK:
+        if REFRESH_STATE["running"]:
+            return {"status": "busy", "state": _refresh_state_snapshot()}
+        REFRESH_STATE["running"] = True
+        REFRESH_STATE["started_at"] = datetime.now().isoformat(timespec="seconds")
+        REFRESH_STATE["finished_at"] = None
+        REFRESH_STATE["ok"] = None
+        REFRESH_STATE["returncode"] = None
+        REFRESH_STATE["html_path"] = None
+        REFRESH_STATE["html_url"] = None
+        REFRESH_STATE["log_tail"] = []
+        t = threading.Thread(target=_run_refresh_async, daemon=True)
+        t.start()
+    return {"status": "started", "state": _refresh_state_snapshot()}
+
+
+def _refresh_state_snapshot() -> dict:
+    return {
+        "running": REFRESH_STATE["running"],
+        "started_at": REFRESH_STATE["started_at"],
+        "finished_at": REFRESH_STATE["finished_at"],
+        "ok": REFRESH_STATE["ok"],
+        "returncode": REFRESH_STATE["returncode"],
+        "log_tail": list(REFRESH_STATE["log_tail"]),
+        "html_path": REFRESH_STATE["html_path"],
+        "html_url": REFRESH_STATE["html_url"],
+    }
+
+
 def parse_repo_from_path(path: str):
     """Parse /chat/<owner>/<repo> → ("owner", "repo") or None."""
     parts = path.strip("/").split("/")
@@ -409,6 +523,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/health":
             self._send_json(200, {"status": "ok"})
             return
+        if self.path == "/refresh/status":
+            self._send_json(200, _refresh_state_snapshot())
+            return
         if self.path == "/profile":
             self._handle_get_profile()
             return
@@ -439,6 +556,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/explain":
             self._handle_explain()
+            return
+        if self.path == "/refresh":
+            self._send_json(200, start_refresh())
             return
         if self.path == "/profile":
             self._handle_save_profile()

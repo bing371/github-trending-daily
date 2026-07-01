@@ -79,6 +79,101 @@
         }
         .nav-btn.disabled { opacity: 0.3; pointer-events: none; }
 
+        /* 立即抓取按钮 */
+        .refresh-btn {
+            border: 1px solid rgba(56,139,253,0.35);
+            background: rgba(56,139,253,0.12);
+            color: #79c0ff;
+        }
+        .refresh-btn:hover {
+            background: rgba(56,139,253,0.22);
+            color: #c9d1d9;
+            border-color: rgba(56,139,253,0.55);
+        }
+        .refresh-btn.running {
+            background: rgba(110,118,129,0.25);
+            color: #c9d1d9;
+            border-color: rgba(110,118,129,0.4);
+            cursor: wait;
+            opacity: 0.85;
+        }
+        .refresh-btn.running .refresh-icon {
+            display: inline-block;
+            animation: refreshSpin 1s linear infinite;
+        }
+        @keyframes refreshSpin {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+        }
+        .refresh-btn.success {
+            background: rgba(46,160,67,0.18);
+            color: #56d364;
+            border-color: rgba(46,160,67,0.45);
+        }
+        .refresh-btn.error {
+            background: rgba(248,81,73,0.18);
+            color: #ff7b72;
+            border-color: rgba(248,81,73,0.45);
+        }
+
+        /* 抓取进度浮窗（右下角） */
+        .refresh-toast {
+            position: fixed; right: 24px; bottom: 24px;
+            z-index: 150;
+            width: 360px; max-width: calc(100vw - 48px);
+            background: #161b22; border: 1px solid #30363d;
+            border-radius: 12px; padding: 16px 18px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+            font-size: 13px; color: #c9d1d9;
+            display: none;
+        }
+        .refresh-toast.show { display: block; }
+        .refresh-toast-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 10px; font-size: 13px;
+        }
+        .refresh-toast-header .title { font-weight: 600; color: #f0f6fc; }
+        .refresh-toast-header .close {
+            background: none; border: none; cursor: pointer;
+            color: #8b949e; font-size: 18px; line-height: 1; padding: 0;
+        }
+        .refresh-toast-header .close:hover { color: #f0f6fc; }
+        .refresh-toast .progress {
+            display: inline-block; margin-right: 6px;
+            animation: refreshSpin 1.2s linear infinite;
+        }
+        .refresh-toast pre {
+            background: #0d1117; border: 1px solid #30363d;
+            border-radius: 8px; padding: 10px 12px;
+            max-height: 160px; overflow-y: auto;
+            margin: 8px 0 0 0;
+            font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+            font-size: 11.5px; line-height: 1.55;
+            color: #8b949e; white-space: pre-wrap; word-break: break-all;
+        }
+        .refresh-toast .actions {
+            display: flex; gap: 8px; margin-top: 12px;
+        }
+        .refresh-toast .actions button {
+            flex: 1; padding: 7px 10px; border-radius: 8px;
+            font-size: 12.5px; cursor: pointer;
+            background: rgba(110,118,129,0.15);
+            border: 1px solid rgba(110,118,129,0.3);
+            color: #c9d1d9; transition: all 0.15s;
+        }
+        .refresh-toast .actions button:hover {
+            background: rgba(110,118,129,0.3);
+            border-color: rgba(110,118,129,0.5);
+        }
+        .refresh-toast .actions button.primary {
+            background: rgba(46,160,67,0.2);
+            border-color: rgba(46,160,67,0.4);
+            color: #56d364;
+        }
+        .refresh-toast .actions button.primary:hover {
+            background: rgba(46,160,67,0.35);
+        }
+
         /* 设置按钮（右上角齿轮） */
         .settings-btn {
             display: inline-flex; align-items: center; gap: 6px;
@@ -676,6 +771,9 @@
                 {% else %}
                     <span class="nav-btn disabled">后一天 ▶</span>
                 {% endif %}
+                <button class="nav-btn refresh-btn" id="refresh-now-btn" title="立即抓取最新热榜（约 30-60 秒）">
+                    <span class="refresh-icon">🔄</span><span class="refresh-label">立即抓取</span>
+                </button>
                 <button class="settings-btn" id="open-profile-modal" title="设置">⚙️ 设置</button>
             </nav>
         </div>
@@ -1135,6 +1233,165 @@
                     textarea.focus();
                 }
             }
+        })();
+
+        // 立即抓取按钮：调用 server.py 的 /refresh，弹进度浮窗
+        (function() {
+            const BACKEND = 'http://127.0.0.1:8765';
+            const btn = document.getElementById('refresh-now-btn');
+            if (!btn) return;
+
+            const iconEl = btn.querySelector('.refresh-icon');
+            const labelEl = btn.querySelector('.refresh-label');
+
+            // 浮窗 DOM（懒创建一次）
+            const toast = document.createElement('div');
+            toast.className = 'refresh-toast';
+            toast.innerHTML = `
+                <div class="refresh-toast-header">
+                    <span class="title"><span class="progress">⏳</span><span class="toast-title-text">正在抓取…</span></span>
+                    <button class="close" type="button" title="关闭">×</button>
+                </div>
+                <div class="toast-summary">⏱ 抓取中…</div>
+                <pre class="toast-log"></pre>
+                <div class="actions" style="display:none;">
+                    <button class="primary toast-open" type="button">📄 打开新页面</button>
+                    <button class="toast-dismiss" type="button">知道了</button>
+                </div>
+            `;
+            document.body.appendChild(toast);
+
+            const closeBtn = toast.querySelector('.close');
+            const titleText = toast.querySelector('.toast-title-text');
+            const summary = toast.querySelector('.toast-summary');
+            const logEl = toast.querySelector('.toast-log');
+            const actions = toast.querySelector('.actions');
+            const openBtn = toast.querySelector('.toast-open');
+            const dismissBtn = toast.querySelector('.toast-dismiss');
+
+            let pollTimer = null;
+            let lastLogLen = 0;
+
+            function setBtnState(state, label) {
+                btn.classList.remove('running', 'success', 'error');
+                if (state) btn.classList.add(state);
+                if (label) labelEl.textContent = label;
+                else labelEl.textContent = '立即抓取';
+                btn.disabled = (state === 'running');
+            }
+
+            function resetBtnSoon(ms) {
+                setTimeout(() => setBtnState(null, '立即抓取'), ms);
+            }
+
+            function showToast(title, summaryText, isError) {
+                titleText.textContent = title;
+                summary.textContent = summaryText;
+                toast.classList.add('show');
+                toast.classList.toggle('error', !!isError);
+            }
+
+            function hideToast() {
+                toast.classList.remove('show');
+                actions.style.display = 'none';
+                lastLogLen = 0;
+                logEl.textContent = '';
+            }
+
+            closeBtn.onclick = hideToast;
+            dismissBtn.onclick = hideToast;
+
+            function pollOnce() {
+                return fetch(BACKEND + '/refresh/status')
+                    .then(r => r.json())
+                    .catch(() => null);
+            }
+
+            function renderLog(state) {
+                const tail = state.log_tail || [];
+                if (tail.length > lastLogLen) {
+                    logEl.textContent = tail.join('\n');
+                    logEl.scrollTop = logEl.scrollHeight;
+                    lastLogLen = tail.length;
+                }
+            }
+
+            function startPolling() {
+                if (pollTimer) return;
+                pollTimer = setInterval(async () => {
+                    const s = await pollOnce();
+                    if (!s) return;
+                    renderLog(s);
+                    if (!s.running) {
+                        clearInterval(pollTimer);
+                        pollTimer = null;
+                        finish(s);
+                    } else {
+                        // 还在跑
+                        showToast('正在抓取…', '⏱ 抓取中（一般 30-60 秒）…', false);
+                    }
+                }, 1200);
+            }
+
+            function finish(state) {
+                renderLog(state);
+                if (state.ok) {
+                    setBtnState('success', '✓ 已抓取');
+                    showToast('✅ 抓取完成', `⏱ 完成于 ${state.finished_at}`, false);
+                    actions.style.display = 'flex';
+                    if (state.html_url) {
+                        openBtn.onclick = () => window.open(state.html_url, '_blank');
+                    } else {
+                        openBtn.style.display = 'none';
+                    }
+                    // 5s 后自动刷新当前页（抓到的是新一天的）
+                    const t = setTimeout(() => location.reload(), 5000);
+                    dismissBtn.onclick = () => { clearTimeout(t); hideToast(); };
+                    resetBtnSoon(5000);
+                } else {
+                    setBtnState('error', '✗ 失败');
+                    const reason = (state.log_tail && state.log_tail.length)
+                        ? state.log_tail[state.log_tail.length - 1]
+                        : `returncode=${state.returncode}`;
+                    showToast('❌ 抓取失败', `原因：${reason}`, true);
+                    actions.style.display = 'flex';
+                    openBtn.style.display = 'none';
+                    resetBtnSoon(8000);
+                }
+            }
+
+            btn.addEventListener('click', async () => {
+                if (btn.disabled) return;
+                // 先查一下当前是不是已经在跑
+                const cur = await pollOnce();
+                if (cur && cur.running) {
+                    showToast('正在抓取…', '⏱ 已在后台运行，请稍候', false);
+                    startPolling();
+                    return;
+                }
+                setBtnState('running', '抓取中…');
+                showToast('正在抓取…', '⏱ 已启动（约 30-60 秒）…', false);
+                actions.style.display = 'none';
+                try {
+                    const r = await fetch(BACKEND + '/refresh', { method: 'POST' });
+                    const j = await r.json();
+                    if (j.status === 'busy') {
+                        startPolling();
+                        return;
+                    }
+                    if (j.status === 'started') {
+                        startPolling();
+                    } else {
+                        setBtnState('error', '✗ 启动失败');
+                        showToast('❌ 启动失败', '后端返回 ' + JSON.stringify(j), true);
+                        resetBtnSoon(5000);
+                    }
+                } catch (err) {
+                    setBtnState('error', '✗ 后端无响应');
+                    showToast('❌ 后端无响应', '请确认 server.py 已启动：' + err.message, true);
+                    resetBtnSoon(5000);
+                }
+            });
         })();
     </script>
 
