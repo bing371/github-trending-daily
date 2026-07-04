@@ -49,3 +49,6 @@ Thumbs.db
 *.bak
 *.tmp
 *.orig
+# favorites - 用户的私人收藏数据（包含讲解和对话）
+data/favorites/
+data/favorites/**/*

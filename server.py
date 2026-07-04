@@ -374,6 +374,13 @@ def clear_chat(owner: str, repo: str) -> None:
 
 
 # ═══════════════════════════════════════
+# 收藏夹已迁移到浏览器端（File System Access API）。
+# 浏览器直接读 / 写用户选择的文件夹，不再走 server。
+# 历史 data/favorites/<owner>/<repo>.json 文件保留，可被新版的 favorites.html 读取。
+# ═══════════════════════════════════════
+
+
+# ═══════════════════════════════════════
 # /refresh 立即抓取（异步跑 run.py）
 # ═══════════════════════════════════════
 REFRESH_LOCK = threading.Lock()
@@ -532,15 +539,95 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/settings/credentials":
             self._handle_get_credentials()
             return
+        # 收藏夹改用浏览器端 File System Access API，server 不再处理
         parsed = parse_repo_from_path(self.path)
         if parsed and parsed[1]:  # GET /chat/owner/repo
             owner, repo = parsed
             data = load_chat(owner, repo)
             self._send_json(200, data)
             return
+        # 静态文件：把 /pages/2026/07/foo.html 等映射到项目根下的对应文件。
+        # 用 secure context 提供服务（http://127.0.0.1:8765），浏览器才能用
+        # File System Access API。file:// 不行。
+        if self.path.startswith("/"):
+            self._serve_static(self.path)
+            return
         self.send_response(404)
         self._cors()
         self.end_headers()
+
+    # ------- static file serving (for /pages/...) -------
+    MIME = {
+        ".html": "text/html; charset=utf-8",
+        ".htm": "text/html; charset=utf-8",
+        ".js": "application/javascript; charset=utf-8",
+        ".mjs": "application/javascript; charset=utf-8",
+        ".css": "text/css; charset=utf-8",
+        ".json": "application/json; charset=utf-8",
+        ".svg": "image/svg+xml",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".ico": "image/x-icon",
+        ".txt": "text/plain; charset=utf-8",
+        ".md": "text/markdown; charset=utf-8",
+    }
+
+    def _serve_static(self, url_path: str):
+        # URL 解码 + 路径安全检查（禁止 .. 跳出项目根）
+        import urllib.parse as _up
+        from pathlib import PurePosixPath
+        rel = _up.unquote(url_path).lstrip("/")
+        try:
+            # PurePosixPath 在 Windows 上也能正确处理 ..
+            posix = PurePosixPath(rel)
+            if ".." in posix.parts:
+                self.send_response(400)
+                self._cors()
+                self.end_headers()
+                return
+        except Exception:
+            self.send_response(400)
+            self._cors()
+            self.end_headers()
+            return
+        abs_path = os.path.normpath(os.path.join(PROJECT_DIR, rel.replace("/", os.sep)))
+        # 必须仍在 PROJECT_DIR 内
+        if not abs_path.startswith(os.path.normpath(PROJECT_DIR)):
+            self.send_response(403)
+            self._cors()
+            self.end_headers()
+            return
+        if not os.path.isfile(abs_path):
+            self.send_response(404)
+            self._cors()
+            self.end_headers()
+            return
+        # 禁止访问敏感文件
+        forbidden = {".env", "user_profile.md"}
+        if os.path.basename(abs_path) in forbidden:
+            self.send_response(403)
+            self._cors()
+            self.end_headers()
+            return
+        ext = os.path.splitext(abs_path)[1].lower()
+        ctype = self.MIME.get(ext, "application/octet-stream")
+        try:
+            with open(abs_path, "rb") as f:
+                body = f.read()
+        except OSError:
+            self.send_response(500)
+            self._cors()
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self._cors()
+        self.end_headers()
+        self.wfile.write(body)
 
     def do_DELETE(self):
         parsed = parse_repo_from_path(self.path)
@@ -565,6 +652,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/settings/credentials":
             self._handle_save_credentials()
+            return
+        parsed_fav = parse_fav_from_path(self.path)
+        if parsed_fav:
+            # 收藏夹已迁移到浏览器端 (File System Access API)。
+            # 仅保留 server-side history 文件可被读，POST 不再接受。
+            self._send_json(410, {"error": "favorites moved to client-side File System Access API"})
             return
         parsed = parse_repo_from_path(self.path)
         if parsed and parsed[1]:

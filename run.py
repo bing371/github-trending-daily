@@ -163,8 +163,11 @@ def _open_in_browser(html_path: str) -> bool:
 
     Returns True if at least one method launched the browser.
     """
-    # Normalize to Windows path with forward slashes (file:/// URL).
-    url = "file:///" + html_path.replace("\\", "/").lstrip("/")
+    # 用 http://127.0.0.1:8765 而不是 file:// — File System Access API 需要
+    # secure context（http://localhost 或 https://），file:// 不行。
+    # 收藏按钮依赖 FSA，所以必须走 server。
+    rel = html_path.replace("\\", "/").split("/pages/", 1)[-1]  # "2026/07/2026-07-04.html"
+    url = f"http://127.0.0.1:8765/pages/{rel}"
 
     # Write popup log to its own file (print is lost when schtasks has no console)
     popup_log = BASE_DIR / "log" / "popup.log"
@@ -497,6 +500,7 @@ def render_daily_html(all_data: dict, cache_info: dict, date_str: str,
 
     weekdays = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
     display_date = f"{today.year}年{today.month}月{today.day}日 {weekdays[today.weekday()]}"
+    iso_date = today.strftime("%Y-%m-%d")
     fetch_time = fetch_time or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # 构建 Tab 数据：含每个窗口的仓库列表 + 元信息
@@ -521,6 +525,7 @@ def render_daily_html(all_data: dict, cache_info: dict, date_str: str,
         tabs=tabs,
         date_str=date_str,
         display_date=display_date,
+        iso_date=iso_date,
         fetch_time=fetch_time,
         prev_path=prev_path if prev_exists else None,
         next_path=next_path if next_exists else None,

@@ -496,6 +496,38 @@
         .explain-btn:disabled {
             opacity: 0.55; cursor: not-allowed; transform: none;
         }
+        .fav-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 5px 12px; border-radius: 6px;
+            font-size: 12.5px; font-weight: 600;
+            color: #e3b341;
+            background: rgba(227,179,65,0.10);
+            border: 1px solid rgba(227,179,65,0.35);
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s ease;
+            margin-left: 6px;
+        }
+        .fav-btn:hover {
+            background: rgba(227,179,65,0.20);
+            border-color: rgba(227,179,65,0.6);
+            color: #f0d271;
+            transform: translateY(-1px);
+        }
+        .fav-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+        .fav-btn.saved {
+            background: rgba(227,179,65,0.25);
+            border-color: rgba(227,179,65,0.7);
+            color: #f8e3a1;
+        }
+        .fav-btn .spinner {
+            display: inline-block; width: 12px; height: 12px;
+            border: 2px solid rgba(227,179,65,0.3);
+            border-top-color: #e3b341;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
         .explain-btn .spinner {
             display: inline-block; width: 12px; height: 12px;
             border: 2px solid rgba(201,209,217,0.3);
@@ -766,6 +798,7 @@
                     <span class="nav-btn disabled">◀ 前一天</span>
                 {% endif %}
                 <a class="nav-btn" href="{{ index_path }}">📋 索引</a>
+                <a class="nav-btn" href="../../favorites.html">⭐ 收藏夹</a>
                 {% if next_path %}
                     <a class="nav-btn" href="{{ next_path }}">后一天 ▶</a>
                 {% else %}
@@ -862,6 +895,16 @@
                     <button type="button" class="explain-btn"
                             data-repo="{{ repo.author }}/{{ repo.name }}">
                         🤖 让 AI 讲解
+                    </button>
+                    <button type="button" class="fav-btn"
+                            data-repo="{{ repo.author }}/{{ repo.name }}"
+                            data-stars="{{ repo.stars or 0 }}"
+                            data-language="{{ repo.language or '' }}"
+                            data-desc-en="{{ (repo.description or '') | e }}"
+                            data-desc-zh="{{ (repo.description_zh or '') | e }}"
+                            data-rank="{{ loop.index }}"
+                            title="收藏这个工具（含讲解 + 对话）">
+                        ⭐ 收藏
                     </button>
                 </div>
                 <div class="ai-explain" data-state="idle" hidden>
@@ -1021,6 +1064,66 @@
             });
         })();
 
+        // ⭐ 收藏夹模块（File System Access API，浏览器本地存储，无需 server）
+        (function() {
+            const FAV_DB = 'gt-favorites-db';
+            const FAV_STORE = 'handles';
+            const FAV_KEY = 'favorites-dir';
+
+            function openDB() {
+                return new Promise((resolve, reject) => {
+                    const req = indexedDB.open(FAV_DB, 1);
+                    req.onupgradeneeded = () => req.result.createObjectStore(FAV_STORE);
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+            }
+            async function saveDirHandle(handle) {
+                const db = await openDB();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(FAV_STORE, 'readwrite');
+                    tx.objectStore(FAV_STORE).put(handle, FAV_KEY);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                });
+            }
+            async function loadDirHandle() {
+                try {
+                    const db = await openDB();
+                    return await new Promise((resolve, reject) => {
+                        const tx = db.transaction(FAV_STORE, 'readonly');
+                        const r = tx.objectStore(FAV_STORE).get(FAV_KEY);
+                        r.onsuccess = () => resolve(r.result || null);
+                        r.onerror = () => reject(r.error);
+                    });
+                } catch { return null; }
+            }
+            async function ensurePermission(handle) {
+                const opts = { mode: 'readwrite' };
+                if ((await handle.queryPermission(opts)) === 'granted') return true;
+                return (await handle.requestPermission(opts)) === 'granted';
+            }
+            async function pickDir() {
+                if (!window.showDirectoryPicker) {
+                    throw new Error('当前浏览器不支持 File System Access API。请使用 Chrome / Edge 86+，并通过 http://127.0.0.1:8765/ 打开');
+                }
+                const handle = await window.showDirectoryPicker({
+                    id: 'github-trending-favorites',
+                    mode: 'readwrite',
+                });
+                await saveDirHandle(handle);
+                return handle;
+            }
+            async function writeFavorite(dir, owner, repo, payload) {
+                const fh = await dir.getFileHandle(`${owner}-${repo}.json`, { create: true });
+                const w = await fh.createWritable();
+                await w.write(JSON.stringify(payload, null, 2));
+                await w.close();
+            }
+
+            window.__favoritesModule = { loadDirHandle, ensurePermission, pickDir, writeFavorite };
+        })();
+
         // AI 聊天面板：多轮对话，本地保存到 server.py
         (function() {
             const BACKEND = 'http://127.0.0.1:8765';
@@ -1112,6 +1215,91 @@
                 } catch (e) {}
                 panel.querySelector('.ai-chat-messages').innerHTML = '';
                 if (toggle) updateBadge(toggle, 0);
+            });
+
+            // ⭐ 收藏按钮（File System Access API）
+            document.addEventListener('click', async function(ev) {
+                const btn = ev.target.closest('.fav-btn');
+                if (!btn) return;
+                ev.preventDefault();
+                if (btn.disabled) return;
+                const card = btn.closest('.repo-card');
+                if (!card) return;
+
+                const repo = btn.dataset.repo;
+                const [owner, repoName] = repo.split('/');
+                const btnOrig = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span> 收藏中…';
+
+                try {
+                    // 1. 抓讲解（如果已生成）
+                    const explainEl = card.querySelector('.ai-explain .ai-output');
+                    const explanation = (explainEl?.innerText || '').trim();
+
+                    // 2. 抓对话历史（从后端拉最新，确保拿到所有）
+                    let conversation = [];
+                    try {
+                        const r = await fetch(`${BACKEND}/chat/${owner}/${repoName}`);
+                        if (r.ok) {
+                            const data = await r.json();
+                            if (Array.isArray(data.messages)) conversation = data.messages;
+                        }
+                    } catch (e) {}
+
+                    // 3. 拼 payload
+                    const payload = {
+                        owner: owner,
+                        repo: repoName,
+                        url: `https://github.com/${owner}/${repoName}`,
+                        stars: parseInt(btn.dataset.stars || '0', 10) || 0,
+                        language: btn.dataset.language || '',
+                        desc_en: btn.dataset.descEn || '',
+                        desc_zh: btn.dataset.descZh || '',
+                        rank: parseInt(btn.dataset.rank || '0', 10) || undefined,
+                        explanation: explanation,
+                        conversation: conversation,
+                        saved_from_date: '{{ iso_date }}',
+                        saved_at: new Date().toISOString().replace(/\.\d+Z$/, ''),
+                    };
+
+                    // 4. 拿 dir handle（首次会弹 picker）
+                    const fav = window.__favoritesModule;
+                    let dir = await fav.loadDirHandle();
+                    if (!dir) {
+                        dir = await fav.pickDir();
+                    } else if (!await fav.ensurePermission(dir)) {
+                        // 权限过期（罕见），重选
+                        dir = await fav.pickDir();
+                    }
+
+                    // 5. 写入文件
+                    await fav.writeFavorite(dir, owner, repoName, payload);
+
+                    btn.classList.add('saved');
+                    btn.innerHTML = '⭐ 已收藏';
+                    btn.title = '已收藏到收藏夹';
+
+                    // 6. toast
+                    const toast = document.createElement('div');
+                    toast.className = 'refresh-toast show ok';
+                    toast.innerHTML = `
+                        <div class="refresh-toast-header">
+                            <span class="title">⭐ 已收藏 ${escapeHtml(owner + '/' + repoName)}</span>
+                            <span class="close" onclick="this.closest('.refresh-toast').remove()">✖</span>
+                        </div>
+                        <div class="actions">
+                            <a class="btn primary" href="../../favorites.html" target="_blank">打开收藏夹</a>
+                        </div>
+                    `;
+                    document.body.appendChild(toast);
+                    setTimeout(() => toast.remove(), 4000);
+                } catch (e) {
+                    btn.disabled = false;
+                    btn.innerHTML = btnOrig;
+                    if (e.name === 'AbortError') return; // 用户取消选择
+                    alert('收藏失败：' + e.message);
+                }
             });
 
             // Send message

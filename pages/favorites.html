@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⭐ 我的收藏 — GitHub Trending</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --bg-card: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-dim: #8b949e;
+            --accent: #58a6ff;
+            --green: #3fb950;
+            --red: #f85149;
+            --gold: #e3b341;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0; padding: 0; line-height: 1.5;
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        header {
+            display: flex; align-items: center; justify-content: space-between;
+            flex-wrap: wrap; gap: 16px; margin-bottom: 24px;
+            padding-bottom: 16px; border-bottom: 1px solid var(--border);
+        }
+        .title { font-size: 22px; font-weight: 600; margin: 0; }
+        .title .count { font-size: 14px; color: var(--text-dim); font-weight: 400; margin-left: 8px; }
+        .nav { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .nav-btn {
+            background: #21262d; color: var(--text); border: 1px solid var(--border);
+            padding: 6px 12px; border-radius: 6px; cursor: pointer; text-decoration: none;
+            font-size: 13px; transition: all 0.15s;
+        }
+        .nav-btn:hover { background: #30363d; border-color: #484f58; }
+        .dir-info {
+            font-size: 12px; color: var(--text-dim); margin-right: 8px;
+            max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .empty {
+            text-align: center; padding: 60px 20px; color: var(--text-dim);
+            background: var(--bg-card); border: 1px dashed var(--border); border-radius: 12px;
+        }
+        .empty-icon { font-size: 48px; margin-bottom: 12px; }
+        .empty .btn { margin-top: 16px; }
+        .fav-list { display: flex; flex-direction: column; gap: 16px; }
+        .fav {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 20px; transition: border-color 0.15s;
+        }
+        .fav:hover { border-color: #484f58; }
+        .fav-head {
+            display: flex; justify-content: space-between; align-items: flex-start;
+            gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+        }
+        .fav-name {
+            font-size: 17px; font-weight: 600; color: var(--accent);
+            text-decoration: none; word-break: break-all;
+        }
+        .fav-name:hover { text-decoration: underline; }
+        .fav-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+        .fav-meta .star { color: var(--gold); }
+        .fav-meta .lang::before {
+            content: ""; display: inline-block; width: 10px; height: 10px;
+            border-radius: 50%; background: #58a6ff; margin-right: 4px; vertical-align: middle;
+        }
+        .fav-saved { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+        .fav-desc { color: var(--text); font-size: 14px; margin: 12px 0; line-height: 1.6; }
+        .fav-desc:empty { display: none; }
+        .section { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+        .section-toggle {
+            background: none; border: none; color: var(--accent); cursor: pointer;
+            font-size: 13px; padding: 0; display: flex; align-items: center; gap: 4px;
+        }
+        .section-toggle:hover { text-decoration: underline; }
+        .section-toggle .arrow { transition: transform 0.15s; }
+        .section.open .section-toggle .arrow { transform: rotate(90deg); }
+        .section-content {
+            display: none; margin-top: 10px; padding: 12px; background: #0d1117;
+            border: 1px solid var(--border); border-radius: 6px;
+            font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+            max-height: 400px; overflow-y: auto;
+        }
+        .section.open .section-content { display: block; }
+        .msg { padding: 8px 10px; margin: 6px 0; border-radius: 6px; }
+        .msg.user { background: #1f6feb20; border-left: 3px solid var(--accent); }
+        .msg.assistant { background: #3fb95020; border-left: 3px solid var(--green); }
+        .msg .role { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); margin-bottom: 4px; }
+        .fav-actions { display: flex; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+        .btn {
+            background: #21262d; color: var(--text); border: 1px solid var(--border);
+            padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+            transition: all 0.15s; text-decoration: none; display: inline-block;
+        }
+        .btn:hover { background: #30363d; border-color: #484f58; }
+        .btn.primary { background: #238636; border-color: #2ea043; color: #fff; }
+        .btn.primary:hover { background: #2ea043; border-color: #3fb950; }
+        .btn.danger { color: var(--red); }
+        .btn.danger:hover { background: #f8514920; border-color: var(--red); }
+        .toast {
+            position: fixed; bottom: 20px; right: 20px; background: #21262d;
+            color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+            padding: 12px 16px; font-size: 13px; z-index: 1000; opacity: 0;
+            transform: translateY(10px); transition: all 0.2s;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.error { border-color: var(--red); color: var(--red); }
+        .toast.ok { border-color: var(--green); }
+        .hint-box {
+            background: #1f6feb15; border: 1px solid #1f6feb40;
+            border-radius: 8px; padding: 14px; margin-bottom: 16px; font-size: 13px; line-height: 1.7;
+        }
+        .hint-box code {
+            background: #0d1117; padding: 1px 6px; border-radius: 4px;
+            font-family: ui-monospace, "Cascadia Code", monospace; font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 class="title">⭐ 我的收藏<span class="count" id="count"></span></h1>
+            <nav class="nav">
+                <span class="dir-info" id="dir-info"></span>
+                <a class="nav-btn" href="./">📋 今日热榜</a>
+                <button class="nav-btn" id="btn-pick">📁 选择收藏夹</button>
+                <button class="nav-btn" id="btn-refresh" style="display:none;">🔄 刷新</button>
+            </nav>
+        </header>
+        <div id="hint" class="hint-box" style="display:none;"></div>
+        <div id="root"></div>
+    </div>
+    <div class="toast" id="toast"></div>
+
+    <script>
+    // ═══════════════════════════════════════
+    // File System Access API helpers
+    // ═══════════════════════════════════════
+    const DB_NAME = 'gt-favorites-db';
+    const STORE = 'handles';
+    const HANDLE_KEY = 'favorites-dir';
+
+    function openDB() {
+        return new Promise((resolve, reject) => {
+            const req = indexedDB.open(DB_NAME, 1);
+            req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+    async function saveDirHandle(handle) {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE, 'readwrite');
+            tx.objectStore(STORE).put(handle, HANDLE_KEY);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+    async function loadDirHandle() {
+        try {
+            const db = await openDB();
+            return await new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE, 'readonly');
+                const req = tx.objectStore(STORE).get(HANDLE_KEY);
+                req.onsuccess = () => resolve(req.result || null);
+                req.onerror = () => reject(req.error);
+            });
+        } catch { return null; }
+    }
+    async function clearDirHandle() {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE, 'readwrite');
+            tx.objectStore(STORE).delete(HANDLE_KEY);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+    async function ensurePermission(handle) {
+        const opts = { mode: 'readwrite' };
+        if ((await handle.queryPermission(opts)) === 'granted') return true;
+        return (await handle.requestPermission(opts)) === 'granted';
+    }
+    async function pickDir() {
+        if (!window.showDirectoryPicker) {
+            throw new Error('您的浏览器不支持 File System Access API。请使用 Chrome / Edge 86+，并通过 http://127.0.0.1:8765/ 打开此页面');
+        }
+        const handle = await window.showDirectoryPicker({ id: 'github-trending-favorites', mode: 'readwrite' });
+        await saveDirHandle(handle);
+        return handle;
+    }
+    async function* walkJson(dir, prefix = '') {
+        for await (const [name, entry] of dir.entries()) {
+            const p = prefix ? `${prefix}/${name}` : name;
+            if (entry.kind === 'file' && name.toLowerCase().endsWith('.json')) {
+                yield { path: p, handle: entry };
+            } else if (entry.kind === 'directory') {
+                yield* walkJson(entry, p);
+            }
+        }
+    }
+    function parsePathToOwnerRepo(path) {
+        // 支持两种布局: "owner-repo.json" 或 "owner/repo.json"
+        const parts = path.split('/');
+        if (parts.length === 1) {
+            const m = parts[0].match(/^(.+?)-(.+)\.json$/i);
+            return m ? { owner: m[1], repo: m[2] } : null;
+        }
+        if (parts.length === 2) {
+            return { owner: parts[0], repo: parts[1].replace(/\.json$/i, '') };
+        }
+        return null;
+    }
+    async function listAllFavorites(dir) {
+        const items = [];
+        for await (const { path, handle } of walkJson(dir)) {
+            try {
+                const file = await handle.getFile();
+                const text = await file.text();
+                const data = JSON.parse(text);
+                const inferred = parsePathToOwnerRepo(path);
+                const owner = data.owner || (inferred && inferred.owner);
+                const repo = data.repo || (inferred && inferred.repo);
+                if (!owner || !repo) continue;
+                items.push({
+                    owner, repo,
+                    url: data.url || `https://github.com/${owner}/${repo}`,
+                    stars: data.stars || 0,
+                    language: data.language || '',
+                    desc_en: data.desc_en || '',
+                    desc_zh: data.desc_zh || '',
+                    rank: data.rank,
+                    saved_at: data.saved_at || '',
+                    saved_from_date: data.saved_from_date || '',
+                    explanation: data.explanation || '',
+                    conversation: Array.isArray(data.conversation) ? data.conversation : [],
+                    sourcePath: path,
+                    raw: data,
+                });
+            } catch (e) {
+                console.warn('跳过损坏文件', path, e);
+            }
+        }
+        // 去重（同 owner/repo 保留最新）
+        const map = new Map();
+        for (const it of items) {
+            const k = `${it.owner}/${it.repo}`;
+            const ex = map.get(k);
+            if (!ex || (it.saved_at || '') > (ex.saved_at || '')) map.set(k, it);
+        }
+        return Array.from(map.values()).sort((a, b) =>
+            (b.saved_at || '').localeCompare(a.saved_at || ''));
+    }
+    async function writeFavorite(dir, owner, repo, payload) {
+        const fileHandle = await dir.getFileHandle(`${owner}-${repo}.json`, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(JSON.stringify(payload, null, 2));
+        await writable.close();
+    }
+    async function deleteFavoriteFile(dir, owner, repo) {
+        // 新布局
+        try { await dir.removeEntry(`${owner}-${repo}.json`); return 'flat'; }
+        catch (e) {
+            if (e.name !== 'NotFoundError' && e.name !== 'TypeError') throw e;
+        }
+        // 旧布局 owner/repo.json
+        try { await dir.removeEntry(`${owner}/${repo}.json`, { recursive: true }); return 'nested'; }
+        catch (e) { if (e.name === 'NotFoundError') return null; throw e; }
+    }
+
+    // ═══════════════════════════════════════
+    // UI
+    // ═══════════════════════════════════════
+    let FAVORITES = [];
+    let DIR_HANDLE = null;
+
+    function escapeHtml(s) {
+        return String(s ?? '').replace(/[&<>"']/g, c => ({
+            "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+        }[c]));
+    }
+    function formatDate(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return iso;
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    function showToast(msg, kind) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'toast show ' + (kind || '');
+        setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    function renderNoSupport() {
+        document.getElementById('root').innerHTML = `
+            <div class="empty">
+                <div class="empty-icon">⚠️</div>
+                <div style="font-size:15px;color:var(--text);margin-bottom:8px;">浏览器不支持 File System Access API</div>
+                <div>请使用 Chrome / Edge 86+，并通过 <code>http://127.0.0.1:8765/</code> 打开此页面（不能直接双击 HTML 文件）</div>
+            </div>
+        `;
+    }
+
+    function renderNeedPick() {
+        document.getElementById('root').innerHTML = `
+            <div class="empty">
+                <div class="empty-icon">📁</div>
+                <div style="font-size:15px;color:var(--text);margin-bottom:8px;">还没选择收藏夹文件夹</div>
+                <div style="font-size:13px;line-height:1.7;max-width:480px;margin:0 auto;">
+                    推荐选择项目下的 <code>data/favorites/</code>，例如：<br>
+                    <code>G:\\agent工作文件夹\\Cc 助理\\github-trending-daily\\data\\favorites</code>
+                </div>
+                <button class="btn primary" onclick="onPickClick()">📁 选择文件夹</button>
+            </div>
+        `;
+    }
+
+    function renderEmpty() {
+        document.getElementById('root').innerHTML = `
+            <div class="empty">
+                <div class="empty-icon">📭</div>
+                <div>还没收藏任何工具</div>
+                <div style="margin-top:8px;font-size:13px;">回到今日热榜，点卡片底部的 ⭐ 收藏按钮</div>
+            </div>
+        `;
+    }
+
+    function renderFav(f, i) {
+        const repoUrl = f.url;
+        const conv = f.conversation;
+        const expl = f.explanation || '';
+        const hasExpl = expl.trim().length > 0;
+        const hasConv = conv.length > 0;
+
+        const convHtml = conv.map(m => `
+            <div class="msg ${escapeHtml(m.role)}">
+                <div class="role">${escapeHtml(m.role === 'user' ? '你' : 'AI')}</div>
+                <div>${escapeHtml(m.content)}</div>
+            </div>
+        `).join('');
+
+        return `
+        <div class="fav" data-owner="${escapeHtml(f.owner)}" data-repo="${escapeHtml(f.repo)}">
+            <div class="fav-head">
+                <div>
+                    <a class="fav-name" href="${escapeHtml(repoUrl)}" target="_blank" rel="noopener">
+                        ${escapeHtml(f.owner)}/${escapeHtml(f.repo)}
+                    </a>
+                    <div class="fav-meta">
+                        <span class="star">⭐ ${(f.stars || 0).toLocaleString()}</span>
+                        ${f.language ? `<span class="lang">${escapeHtml(f.language)}</span>` : ''}
+                        ${f.saved_from_date ? `<span>📅 来源 ${escapeHtml(f.saved_from_date)}</span>` : ''}
+                        ${typeof f.rank === 'number' ? `<span>🏆 #${f.rank}</span>` : ''}
+                    </div>
+                </div>
+                <div class="fav-saved">收藏于 ${formatDate(f.saved_at)}</div>
+            </div>
+            ${f.desc_zh || f.desc_en ? `<div class="fav-desc">${escapeHtml(f.desc_zh || f.desc_en)}</div>` : ''}
+
+            ${hasExpl ? `
+            <div class="section" data-section="expl">
+                <button class="section-toggle" onclick="toggleSection(this)">
+                    <span class="arrow">▶</span> AI 讲解 (${expl.length} 字)
+                </button>
+                <div class="section-content">${escapeHtml(expl)}</div>
+            </div>
+            ` : ''}
+
+            ${hasConv ? `
+            <div class="section" data-section="conv">
+                <button class="section-toggle" onclick="toggleSection(this)">
+                    <span class="arrow">▶</span> 对话记录 (${conv.length} 条)
+                </button>
+                <div class="section-content">${convHtml}</div>
+            </div>
+            ` : ''}
+
+            <div class="fav-actions">
+                <a class="btn" href="${escapeHtml(repoUrl)}" target="_blank" rel="noopener">🔗 打开 GitHub</a>
+                <button class="btn danger" onclick="onDelete('${escapeHtml(f.owner)}', '${escapeHtml(f.repo)}', this)">
+                    🗑 取消收藏
+                </button>
+            </div>
+        </div>
+        `;
+    }
+
+    function render() {
+        const root = document.getElementById('root');
+        const count = document.getElementById('count');
+        count.textContent = FAVORITES.length > 0 ? `(${FAVORITES.length})` : '';
+        if (FAVORITES.length === 0) {
+            renderEmpty();
+            return;
+        }
+        root.innerHTML = `<div class="fav-list">${FAVORITES.map(renderFav).join('')}</div>`;
+    }
+
+    function toggleSection(btn) {
+        btn.closest('.section').classList.toggle('open');
+    }
+
+    // ═══════════════════════════════════════
+    // Actions
+    // ═══════════════════════════════════════
+    async function onPickClick() {
+        try {
+            DIR_HANDLE = await pickDir();
+            await loadAndRender();
+            showToast('已选择收藏夹文件夹', 'ok');
+        } catch (e) {
+            if (e.name !== 'AbortError') {
+                showToast('选择失败：' + e.message, 'error');
+            }
+        }
+    }
+
+    async function loadAndRender() {
+        const dirInfo = document.getElementById('dir-info');
+        const btnRefresh = document.getElementById('btn-refresh');
+        const hint = document.getElementById('hint');
+
+        if (!DIR_HANDLE) {
+            renderNeedPick();
+            dirInfo.textContent = '';
+            btnRefresh.style.display = 'none';
+            return;
+        }
+        if (!await ensurePermission(DIR_HANDLE)) {
+            renderNoSupport();
+            dirInfo.textContent = '（无权限）';
+            btnRefresh.style.display = 'none';
+            return;
+        }
+
+        dirInfo.textContent = '📁 ' + DIR_HANDLE.name;
+        btnRefresh.style.display = '';
+
+        try {
+            FAVORITES = await listAllFavorites(DIR_HANDLE);
+            render();
+            if (FAVORITES.length === 0) {
+                hint.style.display = '';
+                hint.innerHTML = `<b>收藏夹已就绪 ✅</b>　文件夹：<code>${escapeHtml(DIR_HANDLE.name)}</code>　目前为空。<br>回到今日热榜，点卡片底部的 ⭐ 按钮即可收藏。`;
+            } else {
+                hint.style.display = 'none';
+            }
+        } catch (e) {
+            showToast('读取失败：' + e.message, 'error');
+        }
+    }
+
+    async function onDelete(owner, repo, btnEl) {
+        if (!confirm(`取消收藏 ${owner}/${repo} ？`)) return;
+        if (!DIR_HANDLE || !await ensurePermission(DIR_HANDLE)) {
+            showToast('无文件夹权限，请重新选择', 'error');
+            return;
+        }
+        btnEl.disabled = true;
+        try {
+            const layout = await deleteFavoriteFile(DIR_HANDLE, owner, repo);
+            showToast(layout ? '已取消收藏' : '文件不存在（可能已被取消）', 'ok');
+            FAVORITES = FAVORITES.filter(f => !(f.owner === owner && f.repo === repo));
+            setTimeout(render, 300);
+        } catch (e) {
+            btnEl.disabled = false;
+            showToast('取消失败：' + e.message, 'error');
+        }
+    }
+
+    // ═══════════════════════════════════════
+    // Bootstrap
+    // ═══════════════════════════════════════
+    if (!window.showDirectoryPicker) {
+        renderNoSupport();
+    } else {
+        document.getElementById('btn-pick').addEventListener('click', onPickClick);
+        document.getElementById('btn-refresh').addEventListener('click', () => loadAndRender());
+        (async () => {
+            const h = await loadDirHandle();
+            if (h) {
+                DIR_HANDLE = h;
+                await loadAndRender();
+            } else {
+                renderNeedPick();
+            }
+        })();
+    }
+    </script>
+</body>
+</html>
